@@ -1,6 +1,67 @@
 (async () => {
 'use strict';
 
+// ─── License Config ───────────────────────────────────────────────
+const SCRIPT_URL  = 'https://script.google.com/macros/s/AKfycbyJJZOEEo3mLdmIU7VLKqhrDmECwTSupCLLt0JAbwcXtbOIzxwyF9DMX8E_Boqas0Q3tA/exec';
+const KEY_LICENSE = 'cip_license_key';
+
+async function checkLicense(key) {
+  try {
+    const res = await fetch(`${SCRIPT_URL}?key=${encodeURIComponent(key)}`);
+    const txt = await res.text();
+    return txt.trim() === 'active';
+  } catch {
+    return false;
+  }
+}
+
+function showLicensePopup() {
+  if (document.getElementById('_license_popup')) return;
+  const overlay = document.createElement('div');
+  overlay.id = '_license_popup';
+  overlay.style.cssText = `position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.95);display:flex;align-items:center;justify-content:center;z-index:99999999;backdrop-filter:blur(10px);font-family:sans-serif;`;
+  overlay.innerHTML = `
+    <div style="background:#1c1c2e;padding:32px;border-radius:18px;width:320px;color:#fff;border:1px solid #0faf59;text-align:center;">
+      <div style="font-size:32px;margin-bottom:10px;">🔐</div>
+      <h3 style="color:#0faf59;margin:0 0 6px;">Dubai Live Trade</h3>
+      <p style="color:#888;font-size:12px;margin:0 0 20px;">Enter your license key to continue</p>
+      <input id="_lic_inp" type="text" placeholder="License Key"
+        style="width:100%;padding:12px;background:#25253d;border:1px solid #444;color:#fff;border-radius:8px;box-sizing:border-box;font-size:14px;outline:none;text-align:center;letter-spacing:1px;">
+      <div id="_lic_msg" style="height:20px;margin-top:8px;font-size:12px;color:#ff3e3e;"></div>
+      <button id="_lic_btn"
+        style="width:100%;padding:13px;background:#0faf59;border:none;color:#fff;font-weight:bold;font-size:14px;cursor:pointer;border-radius:8px;margin-top:8px;">
+        VERIFY KEY
+      </button>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  const inp = document.getElementById('_lic_inp');
+  const btn = document.getElementById('_lic_btn');
+  const msg = document.getElementById('_lic_msg');
+
+  btn.onclick = async () => {
+    const key = inp.value.trim();
+    if (!key) { msg.textContent = 'Please enter a key!'; return; }
+    btn.textContent = 'Checking...';
+    btn.style.background = '#555';
+    btn.disabled = true;
+    const valid = await checkLicense(key);
+    if (valid) {
+      localStorage.setItem(KEY_LICENSE, key);
+      overlay.remove();
+      init();
+    } else {
+      msg.textContent = '❌ Invalid key! Contact admin.';
+      btn.textContent = 'VERIFY KEY';
+      btn.style.background = '#0faf59';
+      btn.disabled = false;
+      inp.style.borderColor = '#ff3e3e';
+    }
+  };
+  inp.addEventListener('keydown', e => { if (e.key === 'Enter') btn.click(); });
+}
+
+
 // ─── Storage Keys ────────────────────────────────────────────────
 const KEY_LB       = 'leaderboard';
 const KEY_INIT     = 'initBalance';
@@ -450,15 +511,32 @@ document.addEventListener('click', e => {
   }
 }, true);
 
-// ─── Init ─────────────────────────────────────────────────────────
-// Hide banner immediately at page load (before DOM fully ready)
-hideBonusBanner();
 
-setTimeout(() => {
-  fixUrl();
+// ─── Init ─────────────────────────────────────────────────────────
+function init() {
   hideBonusBanner();
-  showFloatingBtn();
-  updateUI();
-}, 1200);
+  setTimeout(() => {
+    fixUrl();
+    hideBonusBanner();
+    showFloatingBtn();
+    updateUI();
+  }, 1200);
+}
+
+// ─── Startup: Check License ───────────────────────────────────────
+(async () => {
+  const savedKey = localStorage.getItem(KEY_LICENSE);
+  if (savedKey) {
+    const valid = await checkLicense(savedKey);
+    if (valid) {
+      init();
+    } else {
+      localStorage.removeItem(KEY_LICENSE);
+      showLicensePopup();
+    }
+  } else {
+    showLicensePopup();
+  }
+})();
 
 })();
