@@ -718,27 +718,30 @@ function init() {
 // ─── Startup: Check License ───────────────────────────────────────
 (async () => {
   const savedKey = localStorage.getItem(KEY_LICENSE);
-  if (savedKey) {
-    let valid = false;
-    try {
-      const res = await Promise.race([
-        fetch(`${SCRIPT_URL}?key=${encodeURIComponent(savedKey)}`),
-        new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 5000))
-      ]);
-      const txt = await res.text();
-      valid = txt.trim() === 'active';
-    } catch {
-      // Network error ya timeout — cached key hai to init karo
-      valid = true;
-    }
-    if (valid) {
+  if (!savedKey) {
+    showLicensePopup();
+    return;
+  }
+
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 6000);
+    const res = await fetch(`${SCRIPT_URL}?key=${encodeURIComponent(savedKey)}`, {
+      signal: controller.signal
+    });
+    clearTimeout(timer);
+    const txt = await res.text();
+
+    if (txt.trim() === 'active') {
       init();
     } else {
+      // Server ne clearly invalid bola
       localStorage.removeItem(KEY_LICENSE);
       showLicensePopup();
     }
-  } else {
-    showLicensePopup();
+  } catch {
+    // Network fail ya timeout — key saved hai to seedha init karo
+    init();
   }
 })();
 
