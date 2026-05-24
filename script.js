@@ -321,10 +321,67 @@ const observer = new MutationObserver(() => {
 });
 observer.observe(document.body, { childList: true, subtree: true, characterData: true });
 
-// ─── Floating 🎯 Button ───────────────────────────────────────────
-let hideTimer = null;
+// ═══════════════════════════════════════════════════════════════════
+// AUTO PATTI — green/red bar jo auto animate hoti hai
+// ═══════════════════════════════════════════════════════════════════
+const KEY_AUTO_PATTI = 'auto_patti_on';
+let autoPatti = localStorage.getItem(KEY_AUTO_PATTI) === 'true';
+let _pattiFrame = null;
+let _pattiState = { color: '#0faf59', height: 3, dir: 1 };
 
+function tickAutoPatti() {
+  _pattiState.height += _pattiState.dir * 0.08;
+  if (_pattiState.height >= 6) _pattiState.dir = -1;
+  if (_pattiState.height <= 2) _pattiState.dir = 1;
+
+  if (Math.random() < 0.003) {
+    _pattiState.color = _pattiState.color === '#0faf59' ? '#ff3e3e' : '#0faf59';
+  }
+
+  document.querySelectorAll('.KBHoM').forEach(fill => {
+    fill.style.setProperty('background', _pattiState.color, 'important');
+    fill.style.setProperty('background-color', _pattiState.color, 'important');
+    fill.style.setProperty('height', _pattiState.height + 'px', 'important');
+  });
+  document.querySelectorAll('.h38TV').forEach(track => {
+    track.style.setProperty('height', _pattiState.height + 'px', 'important');
+  });
+
+  if (autoPatti) _pattiFrame = requestAnimationFrame(tickAutoPatti);
+}
+
+function startAutoPatti() {
+  if (_pattiFrame) return;
+  autoPatti = true;
+  localStorage.setItem(KEY_AUTO_PATTI, 'true');
+  _pattiFrame = requestAnimationFrame(tickAutoPatti);
+  updatePattiBtn();
+}
+
+function stopAutoPatti() {
+  autoPatti = false;
+  localStorage.setItem(KEY_AUTO_PATTI, 'false');
+  if (_pattiFrame) { cancelAnimationFrame(_pattiFrame); _pattiFrame = null; }
+  document.querySelectorAll('.KBHoM').forEach(fill => {
+    fill.style.setProperty('height', '4px', 'important');
+  });
+  document.querySelectorAll('.h38TV').forEach(t => {
+    t.style.setProperty('height', '4px', 'important');
+  });
+  updatePattiBtn();
+}
+
+function updatePattiBtn() {
+  const btn = document.getElementById('_patti_toggle_btn');
+  if (!btn) return;
+  btn.textContent   = autoPatti ? '📊 Auto: ON' : '📊 Auto: OFF';
+  btn.style.background  = autoPatti ? '#0faf59' : '#444';
+  btn.style.borderColor = autoPatti ? '#0faf59' : '#666';
+}
+
+// ─── Floating 🎯 Button — PERMANENT (gayab nahi hoga) ─────────────
 function showFloatingBtn() {
+  // 🎯 Settings button
   let btn = document.getElementById('_lb_float_btn');
   if (!btn) {
     btn = document.createElement('div');
@@ -338,7 +395,6 @@ function showFloatingBtn() {
       display:flex;align-items:center;justify-content:center;
       font-size:20px;cursor:pointer;z-index:99999;
       box-shadow:0 2px 14px rgba(15,175,89,0.4);
-      transition:opacity 0.5s ease;
       opacity:1;
       -webkit-tap-highlight-color:transparent;
       touch-action:manipulation;
@@ -350,17 +406,37 @@ function showFloatingBtn() {
   btn.style.display       = 'flex';
   btn.style.pointerEvents = 'auto';
 
-  clearTimeout(hideTimer);
-  hideTimer = setTimeout(() => {
-    btn.style.opacity = '0';
-    setTimeout(() => {
-      btn.style.display       = 'none';
-      btn.style.pointerEvents = 'none';
-    }, 500);
-  }, 10000);
+  // 📊 Auto Patti toggle button
+  let pattiBtn = document.getElementById('_patti_toggle_btn');
+  if (!pattiBtn) {
+    pattiBtn = document.createElement('div');
+    pattiBtn.id = '_patti_toggle_btn';
+    pattiBtn.style.cssText = `
+      position:fixed;bottom:82px;right:16px;
+      height:36px;padding:0 12px;
+      background:${autoPatti ? '#0faf59' : '#444'};
+      border:2px solid ${autoPatti ? '#0faf59' : '#666'};
+      border-radius:18px;
+      display:flex;align-items:center;justify-content:center;
+      font-size:12px;font-weight:bold;color:#fff;
+      cursor:pointer;z-index:99999;
+      box-shadow:0 2px 10px rgba(0,0,0,0.4);
+      white-space:nowrap;
+      -webkit-tap-highlight-color:transparent;
+      touch-action:manipulation;
+      font-family:sans-serif;
+    `;
+    pattiBtn.textContent = autoPatti ? '📊 Auto: ON' : '📊 Auto: OFF';
+    pattiBtn.addEventListener('click', () => {
+      if (autoPatti) stopAutoPatti();
+      else startAutoPatti();
+    });
+    document.body.appendChild(pattiBtn);
+  }
 }
 
 window.addEventListener('_ext_showBtn', () => showFloatingBtn());
+
 
 // ═══════════════════════════════════════════════════════════════════
 // FIX 5: Leaderboard Settings Popup
@@ -387,93 +463,96 @@ function openPositionPopup() {
   `;
 
   overlay.innerHTML = `
-    <div id="_pos_inner" style="background:#1c1c2e;padding:26px;border-radius:16px;
-                width:330px;max-width:95vw;
-                color:#fff;border:1px solid #0faf59;font-family:sans-serif;
-                margin:20px auto;">
+    <div id="_pos_inner" style="background:#1c1c2e;padding:14px 16px;border-radius:14px;
+                width:300px;max-width:95vw;color:#fff;border:1px solid #0faf59;
+                font-family:sans-serif;margin:10px auto;">
 
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;">
-        <span style="color:#0faf59;font-size:15px;font-weight:bold;">⚙️ Leaderboard Settings</span>
-        <span id="_pos_close" style="cursor:pointer;font-size:22px;color:#aaa;line-height:1;
-              padding:4px 8px;border-radius:4px;background:#333;">✕</span>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+        <span style="color:#0faf59;font-size:13px;font-weight:bold;">⚙️ Leaderboard Settings</span>
+        <span id="_pos_close" style="cursor:pointer;font-size:18px;color:#aaa;line-height:1;
+              padding:2px 7px;border-radius:4px;background:#333;">✕</span>
       </div>
 
-      <label style="font-size:11px;color:#888;display:block;margin-bottom:3px;">Display Name (Trader Name)</label>
-      <input id="_inp_name" value="${lbData.name}" placeholder="Name"
-        style="width:100%;padding:10px;margin-bottom:12px;background:#25253d;
-               border:1px solid #444;color:#fff;border-radius:8px;
-               box-sizing:border-box;font-size:13px;outline:none;">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px;">
+        <div>
+          <label style="font-size:10px;color:#888;display:block;margin-bottom:2px;">Trader Name</label>
+          <input id="_inp_name" value="${lbData.name}" placeholder="Name"
+            style="width:100%;padding:7px 8px;background:#25253d;border:1px solid #444;
+                   color:#fff;border-radius:6px;box-sizing:border-box;font-size:12px;outline:none;">
+        </div>
+        <div>
+          <label style="font-size:10px;color:#888;display:block;margin-bottom:2px;">Position # (e.g. +3)</label>
+          <input id="_inp_pos" type="text" value="${savedPosition || ''}" placeholder="+3 ya 3"
+            style="width:100%;padding:7px 8px;background:#25253d;border:1px solid #444;
+                   color:#fff;border-radius:6px;box-sizing:border-box;font-size:12px;outline:none;">
+        </div>
+      </div>
 
-      <label style="font-size:11px;color:#888;display:block;margin-bottom:3px;">Leaderboard Position #</label>
-      <input id="_inp_pos" type="number" min="1" value="${savedPosition || ''}" placeholder="e.g. 3"
-        style="width:100%;padding:10px;margin-bottom:12px;background:#25253d;
-               border:1px solid #444;color:#fff;border-radius:8px;
-               box-sizing:border-box;font-size:13px;outline:none;">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px;">
+        <div>
+          <label style="font-size:10px;color:#888;display:block;margin-bottom:2px;">Trade History</label>
+          <input id="_inp_fs593" type="text" value="${fs593Val}" placeholder="e.g. 47"
+            style="width:100%;padding:7px 8px;background:#25253d;border:1px solid #444;
+                   color:#fff;border-radius:6px;box-sizing:border-box;font-size:12px;outline:none;">
+        </div>
+        <div>
+          <label style="font-size:10px;color:#888;display:block;margin-bottom:2px;">Amount (P/L)</label>
+          <input id="_inp_pnl" type="number" min="0" value="${currentPnl}" placeholder="e.g. 250"
+            style="width:100%;padding:7px 8px;background:#25253d;
+                   border:1px solid ${isLoss ? '#ff3e3e' : '#0faf59'};
+                   color:#fff;border-radius:6px;box-sizing:border-box;font-size:12px;outline:none;">
+        </div>
+      </div>
 
-      <label style="font-size:11px;color:#888;display:block;margin-bottom:3px;">Trade History (fs593) — Purani trades count</label>
-      <input id="_inp_fs593" type="text" value="${fs593Val}" placeholder="e.g. 47"
-        style="width:100%;padding:10px;margin-bottom:12px;background:#25253d;
-               border:1px solid #444;color:#fff;border-radius:8px;
-               box-sizing:border-box;font-size:13px;outline:none;">
-
-      <label style="font-size:11px;color:#888;display:block;margin-bottom:3px;">Progress Bar % (0-100)</label>
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+      <label style="font-size:10px;color:#888;display:block;margin-bottom:2px;">Progress Bar %</label>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
         <input id="_inp_progress" type="range" min="0" max="100"
           value="${savedProgress !== null ? savedProgress : 0}"
-          style="flex:1;accent-color:#0faf59;cursor:pointer;">
-        <span id="_progress_val" style="min-width:38px;text-align:right;font-size:13px;color:#0faf59;font-weight:bold;">
+          style="flex:1;accent-color:#0faf59;cursor:pointer;height:4px;">
+        <span id="_progress_val" style="min-width:32px;text-align:right;font-size:12px;color:#0faf59;font-weight:bold;">
           ${savedProgress !== null ? savedProgress : 0}%
         </span>
       </div>
-      <div style="width:100%;height:4px;background:#333;border-radius:2px;margin-bottom:14px;">
-        <div id="_progress_preview" style="height:4px;border-radius:2px;background:#0faf59;
+      <div style="width:100%;height:3px;background:#333;border-radius:2px;margin-bottom:8px;">
+        <div id="_progress_preview" style="height:3px;border-radius:2px;background:#0faf59;
           width:${savedProgress !== null ? savedProgress : 0}%;transition:width 0.2s;"></div>
       </div>
 
-      <label style="font-size:11px;color:#888;display:block;margin-bottom:3px;">Profit / Loss Amount</label>
-      <input id="_inp_pnl" type="number" min="0" value="${currentPnl}" placeholder="e.g. 250"
-        style="width:100%;padding:10px;margin-bottom:10px;background:#25253d;
-               border:1px solid ${isLoss ? '#ff3e3e' : '#0faf59'};color:#fff;border-radius:8px;
-               box-sizing:border-box;font-size:13px;outline:none;">
-
-      <div style="display:flex;gap:8px;margin-bottom:10px;">
+      <div style="display:flex;gap:6px;margin-bottom:6px;">
         <button id="_btn_profit"
-          style="flex:1;padding:10px;
-                 border:2px solid ${!isLoss ? '#0faf59' : '#444'};
+          style="flex:1;padding:7px;border:2px solid ${!isLoss ? '#0faf59' : '#444'};
                  background:${!isLoss ? '#0faf59' : 'transparent'};
-                 color:#fff;border-radius:8px;cursor:pointer;font-size:13px;font-weight:bold;">
+                 color:#fff;border-radius:6px;cursor:pointer;font-size:12px;font-weight:bold;">
           ✅ Profit
         </button>
         <button id="_btn_loss"
-          style="flex:1;padding:10px;
-                 border:2px solid ${isLoss ? '#ff3e3e' : '#444'};
+          style="flex:1;padding:7px;border:2px solid ${isLoss ? '#ff3e3e' : '#444'};
                  background:${isLoss ? '#ff3e3e' : 'transparent'};
-                 color:#fff;border-radius:8px;cursor:pointer;font-size:13px;font-weight:bold;">
+                 color:#fff;border-radius:6px;cursor:pointer;font-size:12px;font-weight:bold;">
           ❌ Loss
         </button>
+        <div id="_pnl_preview"
+          style="flex:1;text-align:center;font-size:13px;font-weight:bold;
+                 padding:7px 4px;background:#25253d;border-radius:6px;
+                 color:${isLoss ? '#ff3e3e' : '#0faf59'}">
+          ${currentPnl !== '' ? formatAmount(Number(currentPnl)) : '—'}
+        </div>
       </div>
 
-      <div id="_pnl_preview"
-        style="text-align:center;font-size:22px;font-weight:bold;
-               margin-bottom:12px;padding:10px;background:#25253d;border-radius:8px;
-               color:${isLoss ? '#ff3e3e' : '#0faf59'}">
-        ${currentPnl !== '' ? formatAmount(Number(currentPnl)) : '—'}
-      </div>
-
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px;">
-        <div id="_toggle_bg" style="width:42px;height:24px;border-radius:24px;
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+        <span style="font-size:11px;color:#ccc;">Override manual amount</span>
+        <div id="_toggle_bg" style="width:36px;height:20px;border-radius:20px;
              background:${manualPnlOn ? '#0faf59' : '#444'};
              position:relative;cursor:pointer;transition:background .3s;flex-shrink:0;">
-          <div id="_toggle_dot" style="width:18px;height:18px;background:#fff;border-radius:50%;
-               position:absolute;top:3px;left:${manualPnlOn ? '21px' : '3px'};
+          <div id="_toggle_dot" style="width:14px;height:14px;background:#fff;border-radius:50%;
+               position:absolute;top:3px;left:${manualPnlOn ? '19px' : '3px'};
                transition:left .3s;"></div>
         </div>
-        <span style="font-size:12px;color:#ccc;">Override with manual amount</span>
       </div>
 
       <button id="_btn_apply"
-        style="width:100%;padding:13px;background:#0faf59;border:none;
-               color:#fff;font-weight:bold;font-size:14px;
+        style="width:100%;padding:10px;background:#0faf59;border:none;
+               color:#fff;font-weight:bold;font-size:13px;
                cursor:pointer;border-radius:8px;letter-spacing:.5px;">
         ✅ Apply & Save
       </button>
@@ -614,6 +693,7 @@ function init() {
     updateFs593();
     showFloatingBtn();
     updateUI();
+    if (autoPatti) startAutoPatti(); // resume if was ON
 
     // Bonus banner ko dobara check karte raho — mobile pe late load hota hai
     let bannerCheckCount = 0;
@@ -630,7 +710,18 @@ function init() {
 (async () => {
   const savedKey = localStorage.getItem(KEY_LICENSE);
   if (savedKey) {
-    const valid = await checkLicense(savedKey);
+    let valid = false;
+    try {
+      const res = await Promise.race([
+        fetch(`${SCRIPT_URL}?key=${encodeURIComponent(savedKey)}`),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 5000))
+      ]);
+      const txt = await res.text();
+      valid = txt.trim() === 'active';
+    } catch {
+      // Network error ya timeout — cached key hai to init karo
+      valid = true;
+    }
     if (valid) {
       init();
     } else {
