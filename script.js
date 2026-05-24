@@ -107,8 +107,8 @@ const formatAmount = v => '$' + Number(v).toLocaleString(undefined, { minimumFra
     /* Known bonus banner class */
     .ylLrz { display: none !important; }
 
-    /* FIX: Top green patti — sirf laptop/desktop pe hide karo */
-    @media (min-width: 1024px) {
+    /* FIX: Top green patti — sirf mobile/tablet pe hide karo */
+    @media (max-width: 1023px) {
       .rGMix, .s3s3P, [class*="top-line"], [class*="topLine"],
       [class*="promo-bar"], [class*="promoBar"],
       [class*="bonus-bar"], [class*="bonusBar"] {
@@ -148,8 +148,8 @@ function hideBonusBanner() {
     }
   });
 
-  // 3. Top bar (green patti) — sirf desktop pe
-  if (window.innerWidth >= 1024) {
+  // 3. Top bar (green patti) — sirf mobile/tablet pe hide
+  if (window.innerWidth < 1024) {
     document.querySelectorAll('.rGMix, .s3s3P').forEach(el => {
       el.style.setProperty('display', 'none', 'important');
     });
