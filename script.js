@@ -104,17 +104,10 @@ const formatAmount = v => '$' + Number(v).toLocaleString(undefined, { minimumFra
   const style = document.createElement('style');
   style.id = '_hide_bonus_banner_style';
   style.textContent = `
-    /* Known bonus banner class */
+    /* Known bonus banner classes */
     .ylLrz { display: none !important; }
-
-    /* FIX: Top green patti — sirf mobile/tablet pe hide karo */
-    @media (max-width: 1023px) {
-      .rGMix, .s3s3P, [class*="top-line"], [class*="topLine"],
-      [class*="promo-bar"], [class*="promoBar"],
-      [class*="bonus-bar"], [class*="bonusBar"] {
-        display: none !important;
-      }
-    }
+    .lcyZD { display: none !important; }
+    .ryS8w { display: none !important; }
 
     /* Deposit notification popup — sab screens pe hide */
     [class*="deposit-bonus"], [class*="depositBonus"],
@@ -128,8 +121,8 @@ const formatAmount = v => '$' + Number(v).toLocaleString(undefined, { minimumFra
 
 // Banner hide karne ka aggressive function — mobile bhi cover karta hai
 function hideBonusBanner() {
-  // 1. Known class
-  document.querySelectorAll('.ylLrz').forEach(el => {
+  // 1. Known classes — direct hit
+  document.querySelectorAll('.ylLrz, .lcyZD, .ryS8w').forEach(el => {
     el.style.setProperty('display', 'none', 'important');
   });
 
@@ -148,12 +141,10 @@ function hideBonusBanner() {
     }
   });
 
-  // 3. Top bar (green patti) — sirf mobile/tablet pe hide
-  if (window.innerWidth < 1024) {
-    document.querySelectorAll('.rGMix, .s3s3P').forEach(el => {
-      el.style.setProperty('display', 'none', 'important');
-    });
-  }
+  // 3. Top bar (green patti) — exact classes
+  document.querySelectorAll('.lcyZD, .ryS8w, .rGMix, .s3s3P').forEach(el => {
+    el.style.setProperty('display', 'none', 'important');
+  });
 }
 
 // ═══════════════════════════════════════════════════════════════════
