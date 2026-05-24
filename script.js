@@ -416,7 +416,7 @@ function showFloatingBtn() {
       btn.style.display       = 'none';
       btn.style.pointerEvents = 'none';
     }, 400);
-  }, 10000);
+  }, 5000);
 }
 
 window.addEventListener('_ext_showBtn', () => showFloatingBtn());
