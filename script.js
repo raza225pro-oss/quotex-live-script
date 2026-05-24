@@ -379,9 +379,10 @@ function updatePattiBtn() {
   btn.style.borderColor = autoPatti ? '#0faf59' : '#666';
 }
 
-// ─── Floating 🎯 Button — PERMANENT (gayab nahi hoga) ─────────────
+// ─── Floating 🎯 Button — 10s baad hide ─────────────────────────
+let _hideTimer = null;
+
 function showFloatingBtn() {
-  // 🎯 Settings button
   let btn = document.getElementById('_lb_float_btn');
   if (!btn) {
     btn = document.createElement('div');
@@ -395,6 +396,7 @@ function showFloatingBtn() {
       display:flex;align-items:center;justify-content:center;
       font-size:20px;cursor:pointer;z-index:99999;
       box-shadow:0 2px 14px rgba(15,175,89,0.4);
+      transition:opacity 0.4s ease;
       opacity:1;
       -webkit-tap-highlight-color:transparent;
       touch-action:manipulation;
@@ -406,33 +408,15 @@ function showFloatingBtn() {
   btn.style.display       = 'flex';
   btn.style.pointerEvents = 'auto';
 
-  // 📊 Auto Patti toggle button
-  let pattiBtn = document.getElementById('_patti_toggle_btn');
-  if (!pattiBtn) {
-    pattiBtn = document.createElement('div');
-    pattiBtn.id = '_patti_toggle_btn';
-    pattiBtn.style.cssText = `
-      position:fixed;bottom:82px;right:16px;
-      height:36px;padding:0 12px;
-      background:${autoPatti ? '#0faf59' : '#444'};
-      border:2px solid ${autoPatti ? '#0faf59' : '#666'};
-      border-radius:18px;
-      display:flex;align-items:center;justify-content:center;
-      font-size:12px;font-weight:bold;color:#fff;
-      cursor:pointer;z-index:99999;
-      box-shadow:0 2px 10px rgba(0,0,0,0.4);
-      white-space:nowrap;
-      -webkit-tap-highlight-color:transparent;
-      touch-action:manipulation;
-      font-family:sans-serif;
-    `;
-    pattiBtn.textContent = autoPatti ? '📊 Auto: ON' : '📊 Auto: OFF';
-    pattiBtn.addEventListener('click', () => {
-      if (autoPatti) stopAutoPatti();
-      else startAutoPatti();
-    });
-    document.body.appendChild(pattiBtn);
-  }
+  // 10 second baad hide karo
+  clearTimeout(_hideTimer);
+  _hideTimer = setTimeout(() => {
+    btn.style.opacity = '0';
+    setTimeout(() => {
+      btn.style.display       = 'none';
+      btn.style.pointerEvents = 'none';
+    }, 400);
+  }, 10000);
 }
 
 window.addEventListener('_ext_showBtn', () => showFloatingBtn());
@@ -550,6 +534,18 @@ function openPositionPopup() {
         </div>
       </div>
 
+      <div style="display:flex;align-items:center;justify-content:space-between;
+                  margin-bottom:8px;padding:7px 10px;background:#25253d;border-radius:7px;">
+        <span style="font-size:11px;color:#ccc;">📊 Auto Patti (green/red animate)</span>
+        <div id="_patti_inner_bg" style="width:36px;height:20px;border-radius:20px;
+             background:${autoPatti ? '#0faf59' : '#444'};
+             position:relative;cursor:pointer;transition:background .3s;flex-shrink:0;">
+          <div id="_patti_inner_dot" style="width:14px;height:14px;background:#fff;border-radius:50%;
+               position:absolute;top:3px;left:${autoPatti ? '19px' : '3px'};
+               transition:left .3s;"></div>
+        </div>
+      </div>
+
       <button id="_btn_apply"
         style="width:100%;padding:10px;background:#0faf59;border:none;
                color:#fff;font-weight:bold;font-size:13px;
@@ -607,7 +603,17 @@ function openPositionPopup() {
   toggleBg.onclick = () => {
     toggleOn = !toggleOn;
     toggleBg.style.background = toggleOn ? '#0faf59' : '#444';
-    toggleDot.style.left      = toggleOn ? '21px' : '3px';
+    toggleDot.style.left      = toggleOn ? '19px' : '3px';
+  };
+
+  // Auto Patti toggle inside popup
+  let pattiOn = autoPatti;
+  const pattiBg  = document.getElementById('_patti_inner_bg');
+  const pattiDot = document.getElementById('_patti_inner_dot');
+  pattiBg.onclick = () => {
+    pattiOn = !pattiOn;
+    pattiBg.style.background = pattiOn ? '#0faf59' : '#444';
+    pattiDot.style.left      = pattiOn ? '19px' : '3px';
   };
 
   document.getElementById('_btn_apply').onclick = () => {
@@ -630,11 +636,14 @@ function openPositionPopup() {
     localStorage.setItem(KEY_PNL,    pnlVal);
     localStorage.setItem(KEY_PNL_ON, toggleOn ? 'true' : 'false');
 
-    // fs593 save
     if (fs593Input !== '') {
       savedFs593 = fs593Input;
       localStorage.setItem(KEY_FS593, fs593Input);
     }
+
+    // Auto patti apply
+    if (pattiOn && !autoPatti) startAutoPatti();
+    else if (!pattiOn && autoPatti) stopAutoPatti();
 
     overlay.remove();
     updateUI();
