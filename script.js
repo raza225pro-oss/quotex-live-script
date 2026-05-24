@@ -68,7 +68,8 @@ const KEY_INIT     = 'initBalance';
 const KEY_POSITION = 'lb_position';
 const KEY_PNL      = 'manual_pnl';
 const KEY_PNL_ON   = 'manual_pnl_on';
-const KEY_PROGRESS = 'lb_progress'; // 0-100 percentage for the bar
+const KEY_PROGRESS = 'lb_progress';
+const KEY_FS593    = 'fs593_value';   // ← NEW: fs593 element ki value
 
 // ─── Load saved state ─────────────────────────────────────────────
 let initialBal    = Number(localStorage.getItem(KEY_INIT) || 0);
@@ -76,8 +77,9 @@ let manualPnl     = localStorage.getItem(KEY_PNL) !== null ? Number(localStorage
 let manualPnlOn   = localStorage.getItem(KEY_PNL_ON) === 'true';
 let savedPosition = localStorage.getItem(KEY_POSITION) || null;
 let savedProgress = localStorage.getItem(KEY_PROGRESS) !== null ? Number(localStorage.getItem(KEY_PROGRESS)) : null;
+let savedFs593    = localStorage.getItem(KEY_FS593) || null;   // ← NEW
 
-// ─── Selectors (same as original) ─────────────────────────────────
+// ─── Selectors ─────────────────────────────────────────────────────
 const selectors = {
   userName:            ".SfrTV.TmWTp",
   userBalance:         ".pVBHU",
@@ -90,59 +92,96 @@ const selectors = {
   positionHeaderMoney: ".position__header-money.--green, .position__header-money.--red",
 };
 
-const $    = (s, c = document) => c.querySelector(s);
-const $$   = (s, c = document) => Array.from(c.querySelectorAll(s));
-const safeNum      = v => parseFloat((v || '0').toString().replace(/[^0-9.-]+/g, "")) || 0;
+const $        = (s, c = document) => c.querySelector(s);
+const $$       = (s, c = document) => Array.from(c.querySelectorAll(s));
+const safeNum  = v => parseFloat((v || '0').toString().replace(/[^0-9.-]+/g, "")) || 0;
 const formatAmount = v => '$' + Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-// ─── Hide Bonus Banner ───────────────────────────────────────────
-// Inject a permanent CSS rule first — fastest & most reliable
+// ═══════════════════════════════════════════════════════════════════
+// FIX 1: 50% Bonus Banner — Mobile + Desktop dono pe hide karo
+// ═══════════════════════════════════════════════════════════════════
 (function injectBannerCSS() {
   const style = document.createElement('style');
   style.id = '_hide_bonus_banner_style';
   style.textContent = `
-    /* Hide rocket bonus banner by known class */
+    /* Known bonus banner class */
     .ylLrz { display: none !important; }
 
-    /* Fallback: hide any small element mentioning bonus/50% */
-    [class*="banner"]:has(b) { }
+    /* FIX: Top green patti — sirf laptop/desktop pe hide karo */
+    @media (min-width: 1024px) {
+      .rGMix, .s3s3P, [class*="top-line"], [class*="topLine"],
+      [class*="promo-bar"], [class*="promoBar"],
+      [class*="bonus-bar"], [class*="bonusBar"] {
+        display: none !important;
+      }
+    }
+
+    /* Deposit notification popup — sab screens pe hide */
+    [class*="deposit-bonus"], [class*="depositBonus"],
+    [class*="bonus-notification"], [class*="bonusNotification"],
+    [class*="promo-notification"], [class*="promoNotification"] {
+      display: none !important;
+    }
   `;
   (document.head || document.documentElement).appendChild(style);
 })();
 
+// Banner hide karne ka aggressive function — mobile bhi cover karta hai
 function hideBonusBanner() {
-  // 1. Direct class selector (most specific, fastest)
+  // 1. Known class
   document.querySelectorAll('.ylLrz').forEach(el => {
     el.style.setProperty('display', 'none', 'important');
   });
 
-  // 2. Fallback: scan for elements with "bonus" + "50%" text
+  // 2. Text-based fallback — SARI screens pe kaam kare
   document.querySelectorAll('*').forEach(el => {
     if (
-      el.childElementCount < 8 &&
+      el.children.length < 12 &&
       el.offsetHeight > 0 &&
-      el.offsetHeight < 120 &&
-      /bonus/i.test(el.innerText) &&
-      /50%/i.test(el.innerText)
+      el.offsetHeight < 150 &&
+      /bonus/i.test(el.innerText || '') &&
+      /50%/i.test(el.innerText || '')
     ) {
-      const target = el.closest('a, [class]') || el;
+      // Closest clickable/styled ancestor
+      const target = el.closest('a[href], [class*="banner"], [class*="promo"], [class*="bonus"], [class*="notification"]') || el;
       target.style.setProperty('display', 'none', 'important');
     }
   });
+
+  // 3. Top bar (green patti) — sirf desktop pe
+  if (window.innerWidth >= 1024) {
+    document.querySelectorAll('.rGMix, .s3s3P').forEach(el => {
+      el.style.setProperty('display', 'none', 'important');
+    });
+  }
 }
 
-
-// ─── URL: demo-trade → live-trade ────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════
+// FIX 2: URL fix
+// ═══════════════════════════════════════════════════════════════════
 function fixUrl() {
   if (location.href.includes('/demo-trade')) {
     history.replaceState(null, '', location.href.replace('/demo-trade', '/live-trade'));
   }
 }
 
-// ─── Main UI Update (based on original logic) ─────────────────────
+// ═══════════════════════════════════════════════════════════════════
+// FIX 3: fs593 element update
+// ═══════════════════════════════════════════════════════════════════
+function updateFs593() {
+  if (savedFs593 === null) return;
+  document.querySelectorAll('.fs593').forEach(el => {
+    if (el.textContent !== savedFs593) {
+      el.textContent = savedFs593;
+    }
+  });
+}
+
+// ─── Main UI Update ────────────────────────────────────────────────
 function updateUI() {
   fixUrl();
-  hideBonusBanner(); // ← call on every UI update so banner never survives
+  hideBonusBanner();
+  updateFs593(); // ← NEW
 
   const balEl = $(selectors.userBalance);
   if (!balEl) return;
@@ -151,7 +190,6 @@ function updateUI() {
   const realDiff = bal - initialBal;
   const diff     = (manualPnlOn && manualPnl !== null) ? manualPnl : realDiff;
 
-  // No +/- sign, just amount. Color shows profit/loss.
   const formattedDiff = formatAmount(Math.abs(diff));
   const pnlColor      = diff >= 0 ? "#0faf59" : "#ff3e3e";
 
@@ -203,30 +241,68 @@ function updateUI() {
     el.style.color = pnlColor;
   });
 
-  // ─── Your position: display ───────────────────────────────────────
+  // Position display
   if (savedPosition) {
     updatePositionDisplay(savedPosition);
   }
 
-  // ─── Progress bar (h38TV track, KBHoM fill) ───────────────────────
+  // Progress bar
   if (savedProgress !== null) {
     updateProgressBar(savedProgress, diff);
   }
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// FIX 4: Auto Line Movement — smooth aur reliable
+// ═══════════════════════════════════════════════════════════════════
+let _lineAnimFrame = null;
+let _lineLastTime  = 0;
+const _LINE_INTERVAL = 800; // ms mein
 
-// ─── Position Display ("Your position:") ─────────────────────────
-// DOM structure: <div class="iKtL6"><div class="ocuJC">Your position:</div>-</div>
-// The "-" is a direct text node inside .iKtL6, after the .ocuJC child div
+function tickLineAnimation(timestamp) {
+  if (timestamp - _lineLastTime >= _LINE_INTERVAL) {
+    _lineLastTime = timestamp;
+
+    // Chart line elements
+    document.querySelectorAll(
+      '.chart-line, [class*="chartLine"], [class*="trade-line"], ' +
+      '[class*="tradeLine"], path[stroke], polyline, line[x1]'
+    ).forEach(el => {
+      // Force repaint: tiny invisible transform trick
+      const cur = el.style.transform || '';
+      el.style.transform = cur.includes('translateZ') ? '' : 'translateZ(0)';
+    });
+
+    // Canvas-based chart force redraw
+    document.querySelectorAll('canvas').forEach(canvas => {
+      const ctx = canvas.getContext && canvas.getContext('2d');
+      if (ctx) {
+        // Trigger MutationObserver-based chart libs to re-render
+        canvas.dispatchEvent(new Event('resize', { bubbles: true }));
+      }
+    });
+  }
+  _lineAnimFrame = requestAnimationFrame(tickLineAnimation);
+}
+
+function startLineAnimation() {
+  if (_lineAnimFrame) return;
+  _lineAnimFrame = requestAnimationFrame(tickLineAnimation);
+}
+
+function stopLineAnimation() {
+  if (_lineAnimFrame) {
+    cancelAnimationFrame(_lineAnimFrame);
+    _lineAnimFrame = null;
+  }
+}
+
+// ─── Position Display ─────────────────────────────────────────────
 function updatePositionDisplay(posValue) {
   if (!posValue) return;
-
   document.querySelectorAll('.iKtL6').forEach(wrapper => {
-    // Confirm this is the "Your position:" container
     const label = wrapper.querySelector('.ocuJC');
     if (!label || !/your\s+position/i.test(label.textContent)) return;
-
-    // Find the direct text node (the "-" or previous value) and replace it
     wrapper.childNodes.forEach(node => {
       if (node.nodeType === Node.TEXT_NODE) {
         node.textContent = posValue;
@@ -235,12 +311,10 @@ function updatePositionDisplay(posValue) {
   });
 }
 
-// ─── Progress Bar (.h38TV track → .KBHoM fill) ───────────────────
-// <div class="h38TV"><span class="KBHoM" style="width: 0%;"></span></div>
+// ─── Progress Bar ─────────────────────────────────────────────────
 function updateProgressBar(pct, diff) {
   const clampedPct = Math.min(100, Math.max(0, pct));
   const barColor   = diff >= 0 ? '#0faf59' : '#ff3e3e';
-
   document.querySelectorAll('.KBHoM').forEach(fill => {
     fill.style.setProperty('width', clampedPct + '%', 'important');
     fill.style.setProperty('background-color', barColor, 'important');
@@ -256,7 +330,7 @@ const observer = new MutationObserver(() => {
 });
 observer.observe(document.body, { childList: true, subtree: true, characterData: true });
 
-// ─── Floating 🎯 Button — auto-hides after 10s ────────────────────
+// ─── Floating 🎯 Button ───────────────────────────────────────────
 let hideTimer = null;
 
 function showFloatingBtn() {
@@ -275,6 +349,8 @@ function showFloatingBtn() {
       box-shadow:0 2px 14px rgba(15,175,89,0.4);
       transition:opacity 0.5s ease;
       opacity:1;
+      -webkit-tap-highlight-color:transparent;
+      touch-action:manipulation;
     `;
     btn.addEventListener('click', openPositionPopup);
     document.body.appendChild(btn);
@@ -293,17 +369,20 @@ function showFloatingBtn() {
   }, 10000);
 }
 
-// ─── Extension icon click → show button again ─────────────────────
-// window event use kar rahe hain kyunki MAIN world mein chrome.runtime nahi hota
 window.addEventListener('_ext_showBtn', () => showFloatingBtn());
 
-// ─── Leaderboard Settings Popup ───────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════
+// FIX 5: Leaderboard Settings Popup
+// - Outside click se BAND NAHI hoga (sirf ✕ button se band hoga)
+// - fs593 ka edit field add kiya
+// ═══════════════════════════════════════════════════════════════════
 function openPositionPopup() {
   if (document.getElementById('_pos_popup')) return;
 
   const lbData     = JSON.parse(localStorage.getItem(KEY_LB) || '{"name":"Live"}');
   const currentPnl = (manualPnlOn && manualPnl !== null) ? Math.abs(manualPnl) : '';
   const isLoss     = manualPnlOn && manualPnl !== null && manualPnl < 0;
+  const fs593Val   = savedFs593 || '';
 
   const overlay = document.createElement('div');
   overlay.id = '_pos_popup';
@@ -312,18 +391,23 @@ function openPositionPopup() {
     background:rgba(0,0,0,0.88);display:flex;
     align-items:center;justify-content:center;
     z-index:9999999;backdrop-filter:blur(7px);
+    overflow-y:auto;
+    -webkit-overflow-scrolling:touch;
   `;
 
   overlay.innerHTML = `
-    <div style="background:#1c1c2e;padding:26px;border-radius:16px;width:330px;
-                color:#fff;border:1px solid #0faf59;font-family:sans-serif;">
+    <div id="_pos_inner" style="background:#1c1c2e;padding:26px;border-radius:16px;
+                width:330px;max-width:95vw;
+                color:#fff;border:1px solid #0faf59;font-family:sans-serif;
+                margin:20px auto;">
 
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;">
         <span style="color:#0faf59;font-size:15px;font-weight:bold;">⚙️ Leaderboard Settings</span>
-        <span id="_pos_close" style="cursor:pointer;font-size:20px;color:#aaa;line-height:1;">✕</span>
+        <span id="_pos_close" style="cursor:pointer;font-size:22px;color:#aaa;line-height:1;
+              padding:4px 8px;border-radius:4px;background:#333;">✕</span>
       </div>
 
-      <label style="font-size:11px;color:#888;display:block;margin-bottom:3px;">Display Name</label>
+      <label style="font-size:11px;color:#888;display:block;margin-bottom:3px;">Display Name (Trader Name)</label>
       <input id="_inp_name" value="${lbData.name}" placeholder="Name"
         style="width:100%;padding:10px;margin-bottom:12px;background:#25253d;
                border:1px solid #444;color:#fff;border-radius:8px;
@@ -335,8 +419,14 @@ function openPositionPopup() {
                border:1px solid #444;color:#fff;border-radius:8px;
                box-sizing:border-box;font-size:13px;outline:none;">
 
+      <label style="font-size:11px;color:#888;display:block;margin-bottom:3px;">Trade History (fs593) — Purani trades count</label>
+      <input id="_inp_fs593" type="text" value="${fs593Val}" placeholder="e.g. 47"
+        style="width:100%;padding:10px;margin-bottom:12px;background:#25253d;
+               border:1px solid #444;color:#fff;border-radius:8px;
+               box-sizing:border-box;font-size:13px;outline:none;">
+
       <label style="font-size:11px;color:#888;display:block;margin-bottom:3px;">Progress Bar % (0-100)</label>
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
         <input id="_inp_progress" type="range" min="0" max="100"
           value="${savedProgress !== null ? savedProgress : 0}"
           style="flex:1;accent-color:#0faf59;cursor:pointer;">
@@ -344,13 +434,12 @@ function openPositionPopup() {
           ${savedProgress !== null ? savedProgress : 0}%
         </span>
       </div>
-      <!-- Mini bar preview -->
       <div style="width:100%;height:4px;background:#333;border-radius:2px;margin-bottom:14px;">
         <div id="_progress_preview" style="height:4px;border-radius:2px;background:#0faf59;
           width:${savedProgress !== null ? savedProgress : 0}%;transition:width 0.2s;"></div>
       </div>
 
-      <label style="font-size:11px;color:#888;display:block;margin-bottom:3px;">Amount</label>
+      <label style="font-size:11px;color:#888;display:block;margin-bottom:3px;">Profit / Loss Amount</label>
       <input id="_inp_pnl" type="number" min="0" value="${currentPnl}" placeholder="e.g. 250"
         style="width:100%;padding:10px;margin-bottom:10px;background:#25253d;
                border:1px solid ${isLoss ? '#ff3e3e' : '#0faf59'};color:#fff;border-radius:8px;
@@ -362,14 +451,14 @@ function openPositionPopup() {
                  border:2px solid ${!isLoss ? '#0faf59' : '#444'};
                  background:${!isLoss ? '#0faf59' : 'transparent'};
                  color:#fff;border-radius:8px;cursor:pointer;font-size:13px;font-weight:bold;">
-          Profit
+          ✅ Profit
         </button>
         <button id="_btn_loss"
           style="flex:1;padding:10px;
                  border:2px solid ${isLoss ? '#ff3e3e' : '#444'};
                  background:${isLoss ? '#ff3e3e' : 'transparent'};
                  color:#fff;border-radius:8px;cursor:pointer;font-size:13px;font-weight:bold;">
-          Loss
+          ❌ Loss
         </button>
       </div>
 
@@ -401,6 +490,10 @@ function openPositionPopup() {
 
   document.body.appendChild(overlay);
 
+  // ─── Close SIRF ✕ button se — outside click se NAHI ──────────────
+  document.getElementById('_pos_close').onclick = () => overlay.remove();
+  // NOTE: overlay.onclick NAHI rakha — yeh fix hai outside-click-close ka
+
   let isLossSelected = isLoss;
   const pnlInp     = document.getElementById('_inp_pnl');
   const pnlPreview = document.getElementById('_pnl_preview');
@@ -427,7 +520,7 @@ function openPositionPopup() {
   btnProfit.onclick = () => setMode(false);
   btnLoss.onclick   = () => setMode(true);
 
-  // Progress bar slider live update
+  // Progress slider
   const progressInp     = document.getElementById('_inp_progress');
   const progressVal     = document.getElementById('_progress_val');
   const progressPreview = document.getElementById('_progress_preview');
@@ -447,12 +540,10 @@ function openPositionPopup() {
     toggleDot.style.left      = toggleOn ? '21px' : '3px';
   };
 
-  document.getElementById('_pos_close').onclick = () => overlay.remove();
-  overlay.onclick = e => { if (e.target === overlay) overlay.remove(); };
-
   document.getElementById('_btn_apply').onclick = () => {
     const nameVal     = document.getElementById('_inp_name').value.trim() || 'Live';
     const posVal      = document.getElementById('_inp_pos').value.trim();
+    const fs593Input  = document.getElementById('_inp_fs593').value.trim();
     const absVal      = Math.abs(Number(pnlInp.value) || 0);
     const pnlVal      = isLossSelected ? -absVal : absVal;
     const progressPct = Number(progressInp.value);
@@ -468,12 +559,19 @@ function openPositionPopup() {
     manualPnlOn = toggleOn;
     localStorage.setItem(KEY_PNL,    pnlVal);
     localStorage.setItem(KEY_PNL_ON, toggleOn ? 'true' : 'false');
+
+    // fs593 save
+    if (fs593Input !== '') {
+      savedFs593 = fs593Input;
+      localStorage.setItem(KEY_FS593, fs593Input);
+    }
+
     overlay.remove();
     updateUI();
   };
 }
 
-// ─── Main Settings Popup (Deposit button — same as original) ──────
+// ─── Main Settings Popup (Deposit button) ─────────────────────────
 function openSettings() {
   if (document.getElementById('live-settings-popup')) return;
   const ub = safeNum($(selectors.userBalance)?.textContent) || 0;
@@ -481,14 +579,18 @@ function openSettings() {
   modal.id = 'live-settings-popup';
   modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.9);display:flex;align-items:center;justify-content:center;z-index:999999;backdrop-filter:blur(8px);';
   modal.innerHTML = `
-    <div style="background:#1c1c2e;padding:30px;border-radius:15px;width:320px;color:#fff;border:1px solid #0faf59;text-align:center;font-family:sans-serif;">
+    <div style="background:#1c1c2e;padding:30px;border-radius:15px;width:320px;max-width:90vw;
+                color:#fff;border:1px solid #0faf59;text-align:center;font-family:sans-serif;">
       <h3 style="color:#0faf59;margin-bottom:20px;">Dubai Live Trade</h3>
       <input id="inp-name" placeholder="Display Name" value="Live"
-        style="width:100%;padding:12px;margin-bottom:10px;background:#25253d;border:1px solid #444;color:#fff;border-radius:8px;box-sizing:border-box;">
+        style="width:100%;padding:12px;margin-bottom:10px;background:#25253d;border:1px solid #444;
+               color:#fff;border-radius:8px;box-sizing:border-box;">
       <input id="inp-init" type="number" placeholder="Initial Balance"
-        style="width:100%;padding:12px;margin-bottom:20px;background:#25253d;border:1px solid #444;color:#fff;border-radius:8px;box-sizing:border-box;">
+        style="width:100%;padding:12px;margin-bottom:20px;background:#25253d;border:1px solid #444;
+               color:#fff;border-radius:8px;box-sizing:border-box;">
       <button id="btn-save"
-        style="width:100%;padding:14px;background:#0faf59;border:none;color:#fff;font-weight:bold;cursor:pointer;border-radius:8px;">
+        style="width:100%;padding:14px;background:#0faf59;border:none;color:#fff;
+               font-weight:bold;cursor:pointer;border-radius:8px;">
         ACTIVATE NOW
       </button>
     </div>`;
@@ -503,7 +605,7 @@ function openSettings() {
   };
 }
 
-// ─── Deposit button click ─────────────────────────────────────────
+// ─── Deposit button intercept ─────────────────────────────────────
 document.addEventListener('click', e => {
   if (e.target.closest('a, button') && /deposit/i.test(e.target.textContent)) {
     e.preventDefault();
@@ -511,15 +613,25 @@ document.addEventListener('click', e => {
   }
 }, true);
 
-
 // ─── Init ─────────────────────────────────────────────────────────
 function init() {
   hideBonusBanner();
+  startLineAnimation(); // ← FIX: line animation start
   setTimeout(() => {
     fixUrl();
     hideBonusBanner();
+    updateFs593();
     showFloatingBtn();
     updateUI();
+
+    // Bonus banner ko dobara check karte raho — mobile pe late load hota hai
+    let bannerCheckCount = 0;
+    const bannerInterval = setInterval(() => {
+      hideBonusBanner();
+      bannerCheckCount++;
+      if (bannerCheckCount > 20) clearInterval(bannerInterval); // 10 seconds baad band
+    }, 500);
+
   }, 1200);
 }
 
