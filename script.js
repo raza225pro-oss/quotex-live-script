@@ -69,7 +69,7 @@ const KEY_POSITION = 'lb_position';
 const KEY_PNL      = 'manual_pnl';
 const KEY_PNL_ON   = 'manual_pnl_on';
 const KEY_PROGRESS = 'lb_progress';
-const KEY_FS593    = 'fs593_value';   // ← NEW: fs593 element ki value
+const KEY_FS593    = 'fs593_value';
 
 // ─── Load saved state ─────────────────────────────────────────────
 let initialBal    = Number(localStorage.getItem(KEY_INIT) || 0);
@@ -77,7 +77,7 @@ let manualPnl     = localStorage.getItem(KEY_PNL) !== null ? Number(localStorage
 let manualPnlOn   = localStorage.getItem(KEY_PNL_ON) === 'true';
 let savedPosition = localStorage.getItem(KEY_POSITION) || null;
 let savedProgress = localStorage.getItem(KEY_PROGRESS) !== null ? Number(localStorage.getItem(KEY_PROGRESS)) : null;
-let savedFs593    = localStorage.getItem(KEY_FS593) || null;   // ← NEW
+let savedFs593    = localStorage.getItem(KEY_FS593) || null;
 
 // ─── Selectors ─────────────────────────────────────────────────────
 const selectors = {
@@ -97,19 +97,13 @@ const $$       = (s, c = document) => Array.from(c.querySelectorAll(s));
 const safeNum  = v => parseFloat((v || '0').toString().replace(/[^0-9.-]+/g, "")) || 0;
 const formatAmount = v => '$' + Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-// ═══════════════════════════════════════════════════════════════════
-// FIX 1: 50% Bonus Banner — Mobile + Desktop dono pe hide karo
-// ═══════════════════════════════════════════════════════════════════
 (function injectBannerCSS() {
   const style = document.createElement('style');
   style.id = '_hide_bonus_banner_style';
   style.textContent = `
-    /* Known bonus banner classes */
     .ylLrz { display: none !important; }
     .lcyZD { display: none !important; }
     .ryS8w { display: none !important; }
-
-    /* Deposit notification popup — sab screens pe hide */
     [class*="deposit-bonus"], [class*="depositBonus"],
     [class*="bonus-notification"], [class*="bonusNotification"],
     [class*="promo-notification"], [class*="promoNotification"] {
@@ -119,14 +113,10 @@ const formatAmount = v => '$' + Number(v).toLocaleString(undefined, { minimumFra
   (document.head || document.documentElement).appendChild(style);
 })();
 
-// Banner hide karne ka aggressive function — mobile bhi cover karta hai
 function hideBonusBanner() {
-  // 1. Known classes — direct hit
   document.querySelectorAll('.ylLrz, .lcyZD, .ryS8w').forEach(el => {
     el.style.setProperty('display', 'none', 'important');
   });
-
-  // 2. Text-based fallback — SARI screens pe kaam kare
   document.querySelectorAll('*').forEach(el => {
     if (
       el.children.length < 12 &&
@@ -135,30 +125,21 @@ function hideBonusBanner() {
       /bonus/i.test(el.innerText || '') &&
       /50%/i.test(el.innerText || '')
     ) {
-      // Closest clickable/styled ancestor
       const target = el.closest('a[href], [class*="banner"], [class*="promo"], [class*="bonus"], [class*="notification"]') || el;
       target.style.setProperty('display', 'none', 'important');
     }
   });
-
-  // 3. Top bar (green patti) — exact classes
   document.querySelectorAll('.lcyZD, .ryS8w, .rGMix, .s3s3P').forEach(el => {
     el.style.setProperty('display', 'none', 'important');
   });
 }
 
-// ═══════════════════════════════════════════════════════════════════
-// FIX 2: URL fix
-// ═══════════════════════════════════════════════════════════════════
 function fixUrl() {
   if (location.href.includes('/demo-trade')) {
     history.replaceState(null, '', location.href.replace('/demo-trade', '/live-trade'));
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════
-// FIX 3: fs593 element update
-// ═══════════════════════════════════════════════════════════════════
 function updateFs593() {
   if (savedFs593 === null) return;
   document.querySelectorAll('.fs593').forEach(el => {
@@ -168,11 +149,10 @@ function updateFs593() {
   });
 }
 
-// ─── Main UI Update ────────────────────────────────────────────────
 function updateUI() {
   fixUrl();
   hideBonusBanner();
-  updateFs593(); // ← NEW
+  updateFs593();
 
   const balEl = $(selectors.userBalance);
   if (!balEl) return;
@@ -184,7 +164,6 @@ function updateUI() {
   const formattedDiff = formatAmount(Math.abs(diff));
   const pnlColor      = diff >= 0 ? "#0faf59" : "#ff3e3e";
 
-  // Username → "Live"
   const nameEl = $(selectors.userName);
   if (nameEl && nameEl.textContent !== "Live") {
     nameEl.textContent      = "Live";
@@ -192,7 +171,6 @@ function updateUI() {
     nameEl.style.fontWeight = "bold";
   }
 
-  // Level icon
   const level = bal > 9999 ? 'vip' : (bal > 4999 ? 'pro' : 'standart');
   const icon  = $(selectors.levelIcon);
   if (icon) {
@@ -200,7 +178,6 @@ function updateUI() {
     if (icon.getAttribute("xlink:href") !== href) icon.setAttribute("xlink:href", href);
   }
 
-  // Demo / Live menu items
   const listItems = $$(selectors.usermenuListItems);
   const demoLi = listItems.find(li => /demo/i.test(li.innerText));
   const liveLi = listItems.find(li => /\blive\b/i.test(li.innerText));
@@ -213,62 +190,48 @@ function updateUI() {
     }
   }
 
-  // Position header profit/loss
   const profitEl = $(selectors.positionHeaderMoney);
   if (profitEl) {
     profitEl.innerText   = formattedDiff;
     profitEl.style.color = pnlColor;
   }
 
-  // Leaderboard name
   const lbData = JSON.parse(localStorage.getItem(KEY_LB) || '{"name":"Live"}');
   $$(selectors.lbNameHeader).forEach(el => {
     if (el.textContent !== lbData.name) el.textContent = lbData.name;
   });
 
-  // Leaderboard money
   $$(selectors.lbMoney).forEach(el => {
     el.textContent = formattedDiff;
     el.style.color = pnlColor;
   });
 
-  // Position display
   if (savedPosition) {
     updatePositionDisplay(savedPosition);
   }
 
-  // Progress bar
   if (savedProgress !== null) {
     updateProgressBar(savedProgress, diff);
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════
-// FIX 4: Auto Line Movement — smooth aur reliable
-// ═══════════════════════════════════════════════════════════════════
 let _lineAnimFrame = null;
 let _lineLastTime  = 0;
-const _LINE_INTERVAL = 800; // ms mein
+const _LINE_INTERVAL = 800;
 
 function tickLineAnimation(timestamp) {
   if (timestamp - _lineLastTime >= _LINE_INTERVAL) {
     _lineLastTime = timestamp;
-
-    // Chart line elements
     document.querySelectorAll(
       '.chart-line, [class*="chartLine"], [class*="trade-line"], ' +
       '[class*="tradeLine"], path[stroke], polyline, line[x1]'
     ).forEach(el => {
-      // Force repaint: tiny invisible transform trick
       const cur = el.style.transform || '';
       el.style.transform = cur.includes('translateZ') ? '' : 'translateZ(0)';
     });
-
-    // Canvas-based chart force redraw
     document.querySelectorAll('canvas').forEach(canvas => {
       const ctx = canvas.getContext && canvas.getContext('2d');
       if (ctx) {
-        // Trigger MutationObserver-based chart libs to re-render
         canvas.dispatchEvent(new Event('resize', { bubbles: true }));
       }
     });
@@ -288,7 +251,6 @@ function stopLineAnimation() {
   }
 }
 
-// ─── Position Display ─────────────────────────────────────────────
 function updatePositionDisplay(posValue) {
   if (!posValue) return;
   document.querySelectorAll('.iKtL6').forEach(wrapper => {
@@ -302,7 +264,6 @@ function updatePositionDisplay(posValue) {
   });
 }
 
-// ─── Progress Bar ─────────────────────────────────────────────────
 function updateProgressBar(pct, diff) {
   const clampedPct = Math.min(100, Math.max(0, pct));
   const barColor   = diff >= 0 ? '#0faf59' : '#ff3e3e';
@@ -313,7 +274,6 @@ function updateProgressBar(pct, diff) {
   });
 }
 
-// ─── MutationObserver ─────────────────────────────────────────────
 let uiTimeout;
 const observer = new MutationObserver(() => {
   clearTimeout(uiTimeout);
@@ -321,9 +281,6 @@ const observer = new MutationObserver(() => {
 });
 observer.observe(document.body, { childList: true, subtree: true, characterData: true });
 
-// ═══════════════════════════════════════════════════════════════════
-// AUTO PATTI — green/red bar jo auto animate hoti hai
-// ═══════════════════════════════════════════════════════════════════
 const KEY_AUTO_PATTI = 'auto_patti_on';
 let autoPatti = localStorage.getItem(KEY_AUTO_PATTI) === 'true';
 let _pattiFrame = null;
@@ -379,7 +336,7 @@ function updatePattiBtn() {
   btn.style.borderColor = autoPatti ? '#0faf59' : '#666';
 }
 
-// ─── Floating 🎯 Button — 10s baad hide ─────────────────────────
+// ─── Floating 🎯 Button ───────────────────────────────────────────
 let _hideTimer = null;
 
 function showFloatingBtn() {
@@ -408,7 +365,7 @@ function showFloatingBtn() {
   btn.style.display       = 'flex';
   btn.style.pointerEvents = 'auto';
 
-  // 10 second baad hide karo
+  // 10 second baad auto hide
   clearTimeout(_hideTimer);
   _hideTimer = setTimeout(() => {
     btn.style.opacity = '0';
@@ -416,17 +373,12 @@ function showFloatingBtn() {
       btn.style.display       = 'none';
       btn.style.pointerEvents = 'none';
     }, 400);
-  }, 5000);
+  }, 10000);
 }
 
 window.addEventListener('_ext_showBtn', () => showFloatingBtn());
 
 
-// ═══════════════════════════════════════════════════════════════════
-// FIX 5: Leaderboard Settings Popup
-// - Outside click se BAND NAHI hoga (sirf ✕ button se band hoga)
-// - fs593 ka edit field add kiya
-// ═══════════════════════════════════════════════════════════════════
 function openPositionPopup() {
   if (document.getElementById('_pos_popup')) return;
 
@@ -556,9 +508,7 @@ function openPositionPopup() {
 
   document.body.appendChild(overlay);
 
-  // ─── Close SIRF ✕ button se — outside click se NAHI ──────────────
   document.getElementById('_pos_close').onclick = () => overlay.remove();
-  // NOTE: overlay.onclick NAHI rakha — yeh fix hai outside-click-close ka
 
   let isLossSelected = isLoss;
   const pnlInp     = document.getElementById('_inp_pnl');
@@ -586,7 +536,6 @@ function openPositionPopup() {
   btnProfit.onclick = () => setMode(false);
   btnLoss.onclick   = () => setMode(true);
 
-  // Progress slider
   const progressInp     = document.getElementById('_inp_progress');
   const progressVal     = document.getElementById('_progress_val');
   const progressPreview = document.getElementById('_progress_preview');
@@ -606,7 +555,6 @@ function openPositionPopup() {
     toggleDot.style.left      = toggleOn ? '19px' : '3px';
   };
 
-  // Auto Patti toggle inside popup
   let pattiOn = autoPatti;
   const pattiBg  = document.getElementById('_patti_inner_bg');
   const pattiDot = document.getElementById('_patti_inner_dot');
@@ -641,7 +589,6 @@ function openPositionPopup() {
       localStorage.setItem(KEY_FS593, fs593Input);
     }
 
-    // Auto patti apply
     if (pattiOn && !autoPatti) startAutoPatti();
     else if (!pattiOn && autoPatti) stopAutoPatti();
 
@@ -650,7 +597,6 @@ function openPositionPopup() {
   };
 }
 
-// ─── Main Settings Popup (Deposit button) ─────────────────────────
 function openSettings() {
   if (document.getElementById('live-settings-popup')) return;
   const ub = safeNum($(selectors.userBalance)?.textContent) || 0;
@@ -684,7 +630,6 @@ function openSettings() {
   };
 }
 
-// ─── Deposit button intercept ─────────────────────────────────────
 document.addEventListener('click', e => {
   if (e.target.closest('a, button') && /deposit/i.test(e.target.textContent)) {
     e.preventDefault();
@@ -692,32 +637,33 @@ document.addEventListener('click', e => {
   }
 }, true);
 
-// ─── Init ─────────────────────────────────────────────────────────
 function init() {
   hideBonusBanner();
-  startLineAnimation(); // ← FIX: line animation start
+  startLineAnimation();
   setTimeout(() => {
     fixUrl();
     hideBonusBanner();
     updateFs593();
     showFloatingBtn();
     updateUI();
-    if (autoPatti) startAutoPatti(); // resume if was ON
+    if (autoPatti) startAutoPatti();
 
-    // Bonus banner ko dobara check karte raho — mobile pe late load hota hai
     let bannerCheckCount = 0;
     const bannerInterval = setInterval(() => {
       hideBonusBanner();
       bannerCheckCount++;
-      if (bannerCheckCount > 20) clearInterval(bannerInterval); // 10 seconds baad band
+      if (bannerCheckCount > 20) clearInterval(bannerInterval);
     }, 500);
 
   }, 1200);
 }
 
-// ─── Startup: Check License ───────────────────────────────────────
+// ─── Startup: License Check — STRICT ─────────────────────────────
+// Verify ke baghair BILKUL nahi chalega
+// Network fail ho ya timeout — tab bhi nahi chalega
 (async () => {
   const savedKey = localStorage.getItem(KEY_LICENSE);
+
   if (!savedKey) {
     showLicensePopup();
     return;
@@ -725,23 +671,28 @@ function init() {
 
   try {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 6000);
+    const timer = setTimeout(() => controller.abort(), 8000);
+
     const res = await fetch(`${SCRIPT_URL}?key=${encodeURIComponent(savedKey)}`, {
       signal: controller.signal
     });
     clearTimeout(timer);
+
     const txt = await res.text();
 
     if (txt.trim() === 'active') {
+      // ✅ Verified — chalaao
       init();
     } else {
-      // Server ne clearly invalid bola
+      // ❌ Invalid key
       localStorage.removeItem(KEY_LICENSE);
       showLicensePopup();
     }
+
   } catch {
-    // Network fail ya timeout — key saved hai to seedha init karo
-    init();
+    // ❌ Network error / timeout — nahi chalega, popup dikhao
+    localStorage.removeItem(KEY_LICENSE);
+    showLicensePopup();
   }
 })();
 
