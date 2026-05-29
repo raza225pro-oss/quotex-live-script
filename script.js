@@ -112,14 +112,13 @@ function updateFs593() {
 // Profit: left → right (green)
 // Loss:   right → left (red, margin-left se shift)
 function updateProgressBar(pct, isLoss) {
-  const p  = Math.min(100, Math.max(0, pct));
-  const c  = isLoss ? '#ff3e3e' : '#0faf59';
-  const ml = isLoss ? (100-p)+'%' : '0%';
+  const p = Math.min(100, Math.max(0, pct));
+  const c = isLoss ? '#ff3e3e' : '#0faf59';
   document.querySelectorAll('.KBHoM').forEach(el=>{
-    el.style.setProperty('width',            p+'%', 'important');
-    el.style.setProperty('background',       c,     'important');
-    el.style.setProperty('background-color', c,     'important');
-    el.style.setProperty('margin-left',      ml,    'important');
+    el.style.setProperty('width',            p+'%',      'important');
+    el.style.setProperty('background',       c,          'important');
+    el.style.setProperty('background-color', c,          'important');
+    el.style.setProperty('margin-left',      '0%',       'important');
     el.style.setProperty('transition',       'all 0.6s ease', 'important');
   });
 }
@@ -376,7 +375,7 @@ function openSettingsPopup() {
         <div id="_prog_prev" style="height:4px;border-radius:2px;transition:all 0.2s;
           background:${isLoss?'#ff3e3e':'#0faf59'};
           width:${prog}%;
-          margin-left:${isLoss?(100-prog)+'%':'0%'};"></div>
+          margin-left:0%;"></div>
       </div>
 
       <!-- Auto Patti toggle -->
@@ -441,7 +440,7 @@ function openSettingsPopup() {
     pnlPrev.style.color       = l ? '#ff3e3e' : '#0faf59';
     const pct = Number(progInp.value);
     progPrev.style.background = l ? '#ff3e3e' : '#0faf59';
-    progPrev.style.marginLeft = l ? (100-pct)+'%' : '0%';
+    progPrev.style.marginLeft = '0%';
   }
 
   bProfit.onclick = () => setLoss(false);
@@ -456,7 +455,7 @@ function openSettingsPopup() {
     progVal.textContent       = pct+'%';
     progPrev.style.width      = pct+'%';
     progPrev.style.background = lossMode ? '#ff3e3e' : '#0faf59';
-    progPrev.style.marginLeft = lossMode ? (100-pct)+'%' : '0%';
+    progPrev.style.marginLeft = '0%';
   });
 
   // Auto Patti toggle
