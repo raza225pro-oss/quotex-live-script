@@ -186,6 +186,7 @@ function updateUI() {
     diff = (manualPnlOn && manualPnl !== null) ? manualPnl : realDiff;
   }
 
+  // Loss me minus sign nahi — sirf red color
   const formattedDiff = formatAmount(Math.abs(diff));
   const pnlColor      = diff >= 0 ? "#0faf59" : "#ff3e3e";
 
@@ -693,7 +694,7 @@ function openSettings() {
       <input id="inp-name" placeholder="Display Name" value="Live"
         style="width:100%;padding:12px;margin-bottom:10px;background:#25253d;border:1px solid #444;
                color:#fff;border-radius:8px;box-sizing:border-box;">
-      <input id="inp-init" type="number" placeholder="Initial Balance"
+      <input id="inp-init" type="number" placeholder="Apna starting balance likhो (e.g. 1000)"
         style="width:100%;padding:12px;margin-bottom:20px;background:#25253d;border:1px solid #444;
                color:#fff;border-radius:8px;box-sizing:border-box;">
       <button id="btn-save"
@@ -704,7 +705,9 @@ function openSettings() {
     </div>`;
   document.body.appendChild(modal);
   document.getElementById('btn-save').onclick = () => {
-    initialBal = ub - (Number(document.getElementById('inp-init').value) || 0);
+    // Jo balance abhi hai woh initial set karo — taake diff 0 se start ho
+    const enteredBal = Number(document.getElementById('inp-init').value) || ub;
+    initialBal = enteredBal;
     localStorage.setItem(KEY_INIT, initialBal);
     localStorage.setItem(KEY_LB, JSON.stringify({ name: document.getElementById('inp-name').value || 'Live' }));
     modal.remove();
