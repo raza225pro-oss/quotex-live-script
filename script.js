@@ -54,19 +54,29 @@ const KEY_LB         = 'leaderboard';
 const KEY_INIT       = 'initBalance';
 const KEY_POSITION   = 'lb_position';
 const KEY_PNL        = 'manual_pnl';
-const KEY_PNL_MODE   = 'pnl_mode';       // 'manual' ya 'auto'
+const KEY_PNL_MODE   = 'pnl_mode';
 const KEY_PROGRESS   = 'lb_progress';
 const KEY_FS593      = 'fs593_value';
 const KEY_AUTO_PATTI = 'auto_patti_on';
+const KEY_SESSION_PNL = 'session_pnl';   // ← session ka running P&L
 
 // ─── State ───────────────────────────────────────────────────────
 let initialBal    = Number(localStorage.getItem(KEY_INIT) || 0);
 let manualPnl     = localStorage.getItem(KEY_PNL) !== null ? Number(localStorage.getItem(KEY_PNL)) : null;
-let pnlMode       = localStorage.getItem(KEY_PNL_MODE) || 'auto';  // default: auto
+let pnlMode       = localStorage.getItem(KEY_PNL_MODE) || 'auto';
 let savedPosition = localStorage.getItem(KEY_POSITION) || null;
 let savedProgress = localStorage.getItem(KEY_PROGRESS) !== null ? Number(localStorage.getItem(KEY_PROGRESS)) : null;
 let savedFs593    = localStorage.getItem(KEY_FS593) || null;
 let autoPatti     = localStorage.getItem(KEY_AUTO_PATTI) === 'true';
+
+// ─── Session P&L (zero se start, trades se accumulate) ───────────
+// Yeh sessionStorage mein hai — tab band hone par reset ho jata hai
+// Agar user chahta hai persistent rakhen to localStorage use kar sakte hain
+let sessionPnl = Number(sessionStorage.getItem(KEY_SESSION_PNL) || 0);
+
+function saveSessionPnl() {
+  sessionStorage.setItem(KEY_SESSION_PNL, sessionPnl);
+}
 
 // ─── Helpers ─────────────────────────────────────────────────────
 const selectors = {
@@ -78,10 +88,10 @@ const selectors = {
   usermenuListItems:   "li.CWnO_",
   positionHeaderMoney: ".position__header-money.--green, .position__header-money.--red",
 };
-const $          = (s, c = document) => c.querySelector(s);
-const $$         = (s, c = document) => Array.from(c.querySelectorAll(s));
-const safeNum    = v => parseFloat((v||'0').toString().replace(/[^0-9.-]+/g,''))||0;
-const fmtAmt     = v => '$' + Number(v).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+const $       = (s, c = document) => c.querySelector(s);
+const $$      = (s, c = document) => Array.from(c.querySelectorAll(s));
+const safeNum = v => parseFloat((v||'0').toString().replace(/[^0-9.-]+/g,''))||0;
+const fmtAmt  = v => '$' + Number(v).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
 
 // ─── Banner Hide ─────────────────────────────────────────────────
 (function(){
@@ -109,11 +119,9 @@ function updateFs593() {
   document.querySelectorAll('.fs593').forEach(el=>{ if(el.textContent!==savedFs593) el.textContent=savedFs593; });
 }
 
-// ─── Progress Bar ────────────────────────────────────────────────
-// Profit (green): left se right tak grow kare
-// Loss (red): right taraf se shuru ho aur left ki taraf move kare
+// ─── Progress Bar ─────────────────────────────────────────────────
 function updateProgressBar(pct, isLoss) {
-  const p = Math.min(100, Math.max(0, pct));
+  const p  = Math.min(100, Math.max(0, pct));
   const color = isLoss ? '#ff3e3e' : '#0faf59';
   const ml    = isLoss ? (100 - p) + '%' : '0%';
   document.querySelectorAll('.KBHoM').forEach(fill => {
@@ -125,144 +133,268 @@ function updateProgressBar(pct, isLoss) {
   });
 }
 
-// ─── Main UI Update ──────────────────────────────────────────────
+// ─── Trade Auto-Detection ─────────────────────────────────────────
+// Quotex trade result DOM mein .deal-result ya similar class se aata hai
+// Hum MutationObserver se naya win/loss element detect karte hain
+let _tradeObserver = null;
+let _lastTradeId   = null;   // duplicate trigger rok ne ke liye
+
+// Known result selectors — Quotex ke DOM structure ke mutabiq
+const RESULT_SELECTORS = [
+  '.deals-list__item',          // trade list item
+  '[class*="deal-result"]',
+  '[class*="dealResult"]',
+  '[class*="trade-result"]',
+  '[class*="tradeResult"]',
+  '.deal__profit',
+  '[class*="deal__profit"]',
+  '[class*="dealProfit"]',
+];
+
+function extractTradeResult(el) {
+  // Text se amount nikalo — positive = win, negative = loss
+  const text = el.textContent || '';
+  const match = text.match(/([+-]?\s*\$?\s*[\d,]+\.?\d*)/);
+  if (!match) return null;
+  const cleaned = match[1].replace(/\s|\$/g, '');
+  const val = parseFloat(cleaned);
+  if (isNaN(val) || val === 0) return null;
+  return val;
+}
+
+function onNewTradeResult(el) {
+  // Unique ID banao element ke liye duplicate avoid karne
+  const uid = el.dataset._cipSeen;
+  if (uid) return;
+  el.dataset._cipSeen = '1';
+
+  const result = extractTradeResult(el);
+  if (result === null) return;
+
+  sessionPnl += result;
+  saveSessionPnl();
+  updateUI();
+}
+
+function startTradeObserver() {
+  if (_tradeObserver) return;
+
+  // Pehle existing elements scan karo (page reload case)
+  // Nahi karna — zero se start chahiye, sirf nayi trades count karengi
+  // ---------------------------------------------------------------
+
+  _tradeObserver = new MutationObserver(mutations => {
+    for (const m of mutations) {
+      for (const node of m.addedNodes) {
+        if (node.nodeType !== 1) continue;
+        // Node khud match karta hai?
+        for (const sel of RESULT_SELECTORS) {
+          if (node.matches && node.matches(sel)) {
+            onNewTradeResult(node);
+            break;
+          }
+        }
+        // Ya uske andar koi match karta hai?
+        for (const sel of RESULT_SELECTORS) {
+          node.querySelectorAll && node.querySelectorAll(sel).forEach(child => {
+            onNewTradeResult(child);
+          });
+        }
+      }
+    }
+  });
+
+  _tradeObserver.observe(document.body, { childList: true, subtree: true });
+}
+
+// ─── P&L Value decide karo ───────────────────────────────────────
+function getCurrentPnl() {
+  if (pnlMode === 'manual' && manualPnl !== null) return manualPnl;
+  return sessionPnl;   // auto mode: session trades se
+}
+
+// ─── Main UI Update ───────────────────────────────────────────────
+// Debounce flag — ek waqt mein sirf ek updateUI run ho
+let _uiRunning = false;
+let _uiPending = false;
+
 function updateUI() {
+  if (_uiRunning) { _uiPending = true; return; }
+  _uiRunning = true;
+
+  _runUpdateUI();
+
+  // Agar pending tha to ek aur run karo
+  requestAnimationFrame(() => {
+    _uiRunning = false;
+    if (_uiPending) { _uiPending = false; updateUI(); }
+  });
+}
+
+function _runUpdateUI() {
   fixUrl(); hideBonusBanner(); updateFs593();
 
   const balEl = $(selectors.userBalance);
   if (!balEl) return;
-  const bal      = safeNum(balEl.textContent);
-  const realDiff = bal - initialBal;  // actual profit/loss from initial balance
+  const bal  = safeNum(balEl.textContent);
+  const diff = getCurrentPnl();
 
-  // diff decide karo: auto = real, manual = jo user ne likha
-  const diff   = (pnlMode === 'manual' && manualPnl !== null) ? manualPnl : realDiff;
   const isLoss = diff < 0;
   const color  = isLoss ? '#ff3e3e' : '#0faf59';
-  const shown  = fmtAmt(Math.abs(diff));  // minus sign nahi — sirf red/green
+  const shown  = fmtAmt(Math.abs(diff));
 
-  // Username
+  // Username — sirf ek bar set karo
   const nameEl = $(selectors.userName);
   if (nameEl && nameEl.textContent !== 'Live') {
-    nameEl.textContent = 'Live'; nameEl.style.color = '#0faf59'; nameEl.style.fontWeight = 'bold';
+    nameEl.textContent = 'Live';
+    nameEl.style.color      = '#0faf59';
+    nameEl.style.fontWeight = 'bold';
   }
 
   // Level icon
-  const level = bal>9999?'vip':(bal>4999?'pro':'standart');
+  const level = bal > 9999 ? 'vip' : (bal > 4999 ? 'pro' : 'standart');
   const icon  = $(selectors.levelIcon);
   if (icon) {
     const href = `/profile/images/spritemap.svg#icon-profile-level-${level}`;
     if (icon.getAttribute('xlink:href') !== href) icon.setAttribute('xlink:href', href);
   }
 
-  // Demo/Live menu
+  // Demo/Live menu items — sirf pehla pair update karo
   const items  = $$(selectors.usermenuListItems);
-  const demoLi = items.find(li=>/demo/i.test(li.innerText));
-  const liveLi = items.find(li=>/\blive\b/i.test(li.innerText));
+  const demoLi = items.find(li => /demo/i.test(li.innerText));
+  const liveLi = items.find(li => /\blive\b/i.test(li.innerText));
   if (demoLi && liveLi) {
-    if (demoLi.querySelector('b')) demoLi.querySelector('b').textContent = '$10,000.00';
-    if (liveLi.querySelector('b')) liveLi.querySelector('b').textContent = fmtAmt(bal);
-    if (!liveLi.classList.contains('P5n2A')) { demoLi.classList.remove('P5n2A'); liveLi.classList.add('P5n2A'); }
+    const db = demoLi.querySelector('b');
+    const lb = liveLi.querySelector('b');
+    if (db && db.textContent !== '$10,000.00') db.textContent = '$10,000.00';
+    if (lb) lb.textContent = fmtAmt(bal);
+    if (!liveLi.classList.contains('P5n2A')) {
+      demoLi.classList.remove('P5n2A');
+      liveLi.classList.add('P5n2A');
+    }
   }
 
-  // Position header
+  // Position header money
   const profitEl = $(selectors.positionHeaderMoney);
   if (profitEl) { profitEl.innerText = shown; profitEl.style.color = color; }
 
-  // LB name
-  const lbData = JSON.parse(localStorage.getItem(KEY_LB)||'{"name":"Live"}');
-  $$(selectors.lbNameHeader).forEach(el=>{ if(el.textContent!==lbData.name) el.textContent=lbData.name; });
+  // LB name — dedupe: sirf distinct elements update karo
+  const lbData = JSON.parse(localStorage.getItem(KEY_LB) || '{"name":"Live"}');
+  const seen   = new WeakSet();
+  $$(selectors.lbNameHeader).forEach(el => {
+    if (seen.has(el)) return; seen.add(el);
+    if (el.textContent !== lbData.name) el.textContent = lbData.name;
+  });
 
-  // LB money
-  $$(selectors.lbMoney).forEach(el=>{ el.textContent=shown; el.style.color=color; });
+  // LB money — dedupe
+  const seen2 = new WeakSet();
+  $$(selectors.lbMoney).forEach(el => {
+    if (seen2.has(el)) return; seen2.add(el);
+    el.textContent = shown;
+    el.style.color = color;
+  });
 
-  // Position
+  // Position display
   if (savedPosition) updatePositionDisplay(savedPosition);
 
   // Progress bar
   if (savedProgress !== null) updateProgressBar(savedProgress, isLoss);
 
-  // Auto patti color
+  // Auto patti
   if (autoPatti) applyStaticPatti(isLoss);
 }
 
 // ─── Line Animation ───────────────────────────────────────────────
-let _laf=null, _llt=0;
+let _laf = null, _llt = 0;
 function tickLine(ts) {
-  if(ts-_llt>=800){ _llt=ts;
-    document.querySelectorAll('.chart-line,[class*="chartLine"],[class*="trade-line"],[class*="tradeLine"],path[stroke],polyline,line[x1]').forEach(el=>{
-      el.style.transform=el.style.transform.includes('translateZ')?'':'translateZ(0)';
+  if (ts - _llt >= 800) {
+    _llt = ts;
+    document.querySelectorAll('.chart-line,[class*="chartLine"],[class*="trade-line"],[class*="tradeLine"],path[stroke],polyline,line[x1]').forEach(el => {
+      el.style.transform = el.style.transform.includes('translateZ') ? '' : 'translateZ(0)';
     });
-    document.querySelectorAll('canvas').forEach(c=>{ if(c.getContext&&c.getContext('2d')) c.dispatchEvent(new Event('resize',{bubbles:true})); });
+    document.querySelectorAll('canvas').forEach(c => {
+      if (c.getContext && c.getContext('2d')) c.dispatchEvent(new Event('resize', { bubbles: true }));
+    });
   }
-  _laf=requestAnimationFrame(tickLine);
+  _laf = requestAnimationFrame(tickLine);
 }
-function startLineAnimation(){ if(!_laf) _laf=requestAnimationFrame(tickLine); }
+function startLineAnimation() { if (!_laf) _laf = requestAnimationFrame(tickLine); }
 
 // ─── Position Text ────────────────────────────────────────────────
 function updatePositionDisplay(v) {
-  document.querySelectorAll('.iKtL6').forEach(w=>{
-    const lbl=w.querySelector('.ocuJC');
-    if(!lbl||!/your\s+position/i.test(lbl.textContent)) return;
-    w.childNodes.forEach(n=>{ if(n.nodeType===Node.TEXT_NODE) n.textContent=v; });
+  document.querySelectorAll('.iKtL6').forEach(w => {
+    const lbl = w.querySelector('.ocuJC');
+    if (!lbl || !/your\s+position/i.test(lbl.textContent)) return;
+    w.childNodes.forEach(n => { if (n.nodeType === Node.TEXT_NODE) n.textContent = v; });
   });
 }
 
-// ─── MutationObserver ─────────────────────────────────────────────
+// ─── MutationObserver for UI ──────────────────────────────────────
 let _uiT;
-new MutationObserver(()=>{ clearTimeout(_uiT); _uiT=setTimeout(updateUI,50); })
-  .observe(document.body,{childList:true,subtree:true,characterData:true});
+new MutationObserver(() => {
+  clearTimeout(_uiT);
+  _uiT = setTimeout(updateUI, 100);   // 50 → 100 ms, thoda zyada debounce
+}).observe(document.body, { childList: true, subtree: true, characterData: true });
 
-// ─── Auto Patti — static color only, no animation ─────────────────
+// ─── Auto Patti ───────────────────────────────────────────────────
 function applyStaticPatti(isLoss) {
   const color = isLoss ? '#ff3e3e' : '#0faf59';
-  document.querySelectorAll('.KBHoM').forEach(el=>{
+  document.querySelectorAll('.KBHoM').forEach(el => {
     el.style.setProperty('background',       color, 'important');
     el.style.setProperty('background-color', color, 'important');
     el.style.setProperty('height',           '4px', 'important');
   });
-  document.querySelectorAll('.h38TV').forEach(el=>el.style.setProperty('height','4px','important'));
+  document.querySelectorAll('.h38TV').forEach(el => el.style.setProperty('height', '4px', 'important'));
 }
 
 function startAutoPatti() {
-  autoPatti=true; localStorage.setItem(KEY_AUTO_PATTI,'true');
-  const bal=safeNum($(selectors.userBalance)?.textContent);
-  applyStaticPatti((bal-initialBal)<0);
+  autoPatti = true;
+  localStorage.setItem(KEY_AUTO_PATTI, 'true');
+  applyStaticPatti(sessionPnl < 0);
 }
 function stopAutoPatti() {
-  autoPatti=false; localStorage.setItem(KEY_AUTO_PATTI,'false');
-  document.querySelectorAll('.KBHoM').forEach(el=>el.style.setProperty('height','4px','important'));
+  autoPatti = false;
+  localStorage.setItem(KEY_AUTO_PATTI, 'false');
+  document.querySelectorAll('.KBHoM').forEach(el => el.style.setProperty('height', '4px', 'important'));
 }
 
 // ─── Floating 🎯 Button ───────────────────────────────────────────
-let _hideT=null;
+let _hideT = null;
 function showFloatingBtn() {
-  let btn=document.getElementById('_lb_float_btn');
-  if(!btn){
-    btn=document.createElement('div');
-    btn.id='_lb_float_btn'; btn.textContent='🎯';
-    btn.style.cssText=`position:fixed;bottom:130px;right:16px;width:42px;height:42px;background:#1c1c2e;border:2px solid #0faf59;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;cursor:pointer;z-index:99999;box-shadow:0 2px 14px rgba(15,175,89,0.4);transition:opacity 0.4s ease;opacity:1;-webkit-tap-highlight-color:transparent;touch-action:manipulation;`;
+  let btn = document.getElementById('_lb_float_btn');
+  if (!btn) {
+    btn = document.createElement('div');
+    btn.id = '_lb_float_btn';
+    btn.textContent = '🎯';
+    btn.style.cssText = `position:fixed;bottom:130px;right:16px;width:42px;height:42px;background:#1c1c2e;border:2px solid #0faf59;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;cursor:pointer;z-index:99999;box-shadow:0 2px 14px rgba(15,175,89,0.4);transition:opacity 0.4s ease;opacity:1;-webkit-tap-highlight-color:transparent;touch-action:manipulation;`;
     btn.addEventListener('click', openSettingsPopup);
     document.body.appendChild(btn);
   }
-  btn.style.opacity='1'; btn.style.display='flex'; btn.style.pointerEvents='auto';
+  btn.style.opacity      = '1';
+  btn.style.display      = 'flex';
+  btn.style.pointerEvents = 'auto';
   clearTimeout(_hideT);
-  _hideT=setTimeout(()=>{
-    btn.style.opacity='0';
-    setTimeout(()=>{ btn.style.display='none'; btn.style.pointerEvents='none'; },400);
-  },10000);
+  _hideT = setTimeout(() => {
+    btn.style.opacity = '0';
+    setTimeout(() => { btn.style.display = 'none'; btn.style.pointerEvents = 'none'; }, 400);
+  }, 10000);
 }
 window.addEventListener('_ext_showBtn', showFloatingBtn);
 
 // ─── Settings Popup ───────────────────────────────────────────────
 function openSettingsPopup() {
-  if(document.getElementById('_pos_popup')) return;
+  if (document.getElementById('_pos_popup')) return;
 
-  const lbData   = JSON.parse(localStorage.getItem(KEY_LB)||'{"name":"Live"}');
+  const lbData   = JSON.parse(localStorage.getItem(KEY_LB) || '{"name":"Live"}');
   const isManual = pnlMode === 'manual';
   const curPnl   = (isManual && manualPnl !== null) ? Math.abs(manualPnl) : '';
   const isLoss   = isManual && manualPnl !== null && manualPnl < 0;
   const fs593Val = savedFs593 || '';
   const prog     = savedProgress !== null ? savedProgress : 0;
+
+  // Current session P&L display
+  const sessIsLoss = sessionPnl < 0;
+  const sessColor  = sessIsLoss ? '#ff3e3e' : '#0faf59';
 
   const overlay = document.createElement('div');
   overlay.id = '_pos_popup';
@@ -275,6 +407,16 @@ function openSettingsPopup() {
         <span style="color:#0faf59;font-size:13px;font-weight:bold;">⚙️ Leaderboard Settings</span>
         <span id="_pos_close" style="cursor:pointer;font-size:18px;color:#aaa;padding:2px 7px;border-radius:4px;background:#333;">✕</span>
       </div>
+
+      <!-- Session P&L info box -->
+      <div style="background:#0d0d1a;border:1px solid ${sessColor}44;border-radius:8px;padding:8px 12px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;">
+        <span style="font-size:11px;color:#888;">📈 Session P&L (auto)</span>
+        <span style="font-size:14px;font-weight:bold;color:${sessColor}">${sessIsLoss?'-':'+'} ${fmtAmt(Math.abs(sessionPnl))}</span>
+      </div>
+      <!-- Reset session button -->
+      <button id="_btn_reset_session" style="width:100%;padding:6px;background:transparent;border:1px solid #555;color:#888;font-size:11px;cursor:pointer;border-radius:6px;margin-bottom:10px;">
+        🔄 Reset Session P&L to $0
+      </button>
 
       <!-- Name + Position -->
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px;">
@@ -307,7 +449,7 @@ function openSettingsPopup() {
           style="flex:1;padding:7px;border-radius:6px;font-size:11px;font-weight:bold;cursor:pointer;
                  border:2px solid ${!isManual?'#0faf59':'#444'};
                  background:${!isManual?'#0faf59':'transparent'};color:#fff;">
-          ⚡ Auto (Real-time)
+          ⚡ Auto (Trades)
         </button>
         <button id="_btn_mode_manual"
           style="flex:1;padding:7px;border-radius:6px;font-size:11px;font-weight:bold;cursor:pointer;
@@ -336,7 +478,7 @@ function openSettingsPopup() {
       <!-- Auto info -->
       <div id="_auto_section" style="display:${!isManual?'flex':'none'};align-items:center;gap:8px;margin-bottom:8px;padding:8px 10px;background:#0a2010;border:1px solid #0faf5944;border-radius:8px;">
         <span style="font-size:18px;">⚡</span>
-        <span style="font-size:11px;color:#0faf59;line-height:1.4;">Starting Balance se real-time profit/loss auto show hoga</span>
+        <span style="font-size:11px;color:#0faf59;line-height:1.4;">Har trade ka win/loss automatically count hoga — zero se start</span>
       </div>
 
       <!-- Progress Bar -->
@@ -365,6 +507,14 @@ function openSettingsPopup() {
   document.body.appendChild(overlay);
   document.getElementById('_pos_close').onclick = () => overlay.remove();
 
+  // Reset session
+  document.getElementById('_btn_reset_session').onclick = () => {
+    sessionPnl = 0;
+    saveSessionPnl();
+    overlay.remove();
+    updateUI();
+  };
+
   // Mode toggle
   let mode = pnlMode;
   const btnAuto   = document.getElementById('_btn_mode_auto');
@@ -374,12 +524,12 @@ function openSettingsPopup() {
 
   function setMode(m) {
     mode = m;
-    btnAuto.style.background   = m==='auto'   ? '#0faf59' : 'transparent';
-    btnAuto.style.borderColor  = m==='auto'   ? '#0faf59' : '#444';
-    btnManual.style.background = m==='manual' ? '#0faf59' : 'transparent';
-    btnManual.style.borderColor= m==='manual' ? '#0faf59' : '#444';
-    manSec.style.display  = m==='manual' ? 'block' : 'none';
-    autoSec.style.display = m==='auto'   ? 'flex'  : 'none';
+    btnAuto.style.background    = m === 'auto'   ? '#0faf59' : 'transparent';
+    btnAuto.style.borderColor   = m === 'auto'   ? '#0faf59' : '#444';
+    btnManual.style.background  = m === 'manual' ? '#0faf59' : 'transparent';
+    btnManual.style.borderColor = m === 'manual' ? '#0faf59' : '#444';
+    manSec.style.display  = m === 'manual' ? 'block' : 'none';
+    autoSec.style.display = m === 'auto'   ? 'flex'  : 'none';
   }
   btnAuto.onclick   = () => setMode('auto');
   btnManual.onclick = () => setMode('manual');
@@ -390,7 +540,7 @@ function openSettingsPopup() {
   const pnlPrev = document.getElementById('_pnl_preview');
   const bProfit = document.getElementById('_btn_profit');
   const bLoss   = document.getElementById('_btn_loss');
-  const progPrev= document.getElementById('_prog_preview');
+  const progPrev = document.getElementById('_prog_preview');
 
   function setLoss(l) {
     lossMode = l;
@@ -402,10 +552,10 @@ function openSettingsPopup() {
     pnlPrev.style.color       = l ? '#ff3e3e' : '#0faf59';
     const pct = Number(document.getElementById('_inp_progress').value);
     progPrev.style.background = l ? '#ff3e3e' : '#0faf59';
-    progPrev.style.marginLeft = l ? (100-pct)+'%' : '0%';
+    progPrev.style.marginLeft = l ? (100 - pct) + '%' : '0%';
   }
   function refreshPreview() {
-    pnlPrev.textContent = fmtAmt(Math.abs(Number(pnlInp.value)||0));
+    pnlPrev.textContent = fmtAmt(Math.abs(Number(pnlInp.value) || 0));
   }
   bProfit.onclick = () => setLoss(false);
   bLoss.onclick   = () => setLoss(true);
@@ -419,7 +569,7 @@ function openSettingsPopup() {
     progVal.textContent       = pct + '%';
     progPrev.style.width      = pct + '%';
     progPrev.style.background = lossMode ? '#ff3e3e' : '#0faf59';
-    progPrev.style.marginLeft = lossMode ? (100-pct)+'%' : '0%';
+    progPrev.style.marginLeft = lossMode ? (100 - pct) + '%' : '0%';
   });
 
   // Auto Patti toggle
@@ -432,7 +582,7 @@ function openSettingsPopup() {
     pattiDot.style.left      = pattiOn ? '19px' : '3px';
   };
 
-  // Apply
+  // Apply & Save
   document.getElementById('_btn_apply').onclick = () => {
     const nameVal    = document.getElementById('_inp_name').value.trim() || 'Live';
     const posVal     = document.getElementById('_inp_pos').value.trim();
@@ -440,26 +590,25 @@ function openSettingsPopup() {
     const initInput  = Number(document.getElementById('_inp_init').value);
     const progPct    = Number(progInp.value);
 
-    // Starting balance save
     if (initInput > 0) {
       initialBal = initInput;
       localStorage.setItem(KEY_INIT, initialBal);
     }
 
-    localStorage.setItem(KEY_LB, JSON.stringify({name: nameVal}));
+    localStorage.setItem(KEY_LB, JSON.stringify({ name: nameVal }));
     if (posVal) { savedPosition = posVal; localStorage.setItem(KEY_POSITION, posVal); }
     savedProgress = progPct; localStorage.setItem(KEY_PROGRESS, progPct);
     pnlMode = mode; localStorage.setItem(KEY_PNL_MODE, mode);
 
     if (mode === 'manual') {
-      const absVal = Math.abs(Number(pnlInp.value)||0);
+      const absVal = Math.abs(Number(pnlInp.value) || 0);
       manualPnl = lossMode ? -absVal : absVal;
       localStorage.setItem(KEY_PNL, manualPnl);
     }
 
-    if (fs593Input) { savedFs593=fs593Input; localStorage.setItem(KEY_FS593, fs593Input); }
+    if (fs593Input) { savedFs593 = fs593Input; localStorage.setItem(KEY_FS593, fs593Input); }
 
-    if (pattiOn && !autoPatti) startAutoPatti();
+    if (pattiOn && !autoPatti)  startAutoPatti();
     else if (!pattiOn && autoPatti) stopAutoPatti();
 
     overlay.remove();
@@ -469,8 +618,8 @@ function openSettingsPopup() {
 
 // ─── Deposit button → open settings ──────────────────────────────
 function openInitPopup() {
-  if(document.getElementById('live-settings-popup')) return;
-  const ub = safeNum($(selectors.userBalance)?.textContent)||0;
+  if (document.getElementById('live-settings-popup')) return;
+  const ub    = safeNum($(selectors.userBalance)?.textContent) || 0;
   const modal = document.createElement('div');
   modal.id = 'live-settings-popup';
   modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.9);display:flex;align-items:center;justify-content:center;z-index:999999;backdrop-filter:blur(8px);';
@@ -486,16 +635,15 @@ function openInitPopup() {
   document.body.appendChild(modal);
   document.getElementById('btn-save').onclick = () => {
     const entered = Number(document.getElementById('inp-init').value);
-    // Starting balance jo user ne likha — diff yahan se 0 se start hoga
     initialBal = entered > 0 ? entered : ub;
     localStorage.setItem(KEY_INIT, initialBal);
-    localStorage.setItem(KEY_LB, JSON.stringify({name: document.getElementById('inp-name').value||'Live'}));
+    localStorage.setItem(KEY_LB, JSON.stringify({ name: document.getElementById('inp-name').value || 'Live' }));
     modal.remove();
     updateUI();
   };
 }
-document.addEventListener('click', e=>{
-  if(e.target.closest('a,button')&&/deposit/i.test(e.target.textContent)){
+document.addEventListener('click', e => {
+  if (e.target.closest('a,button') && /deposit/i.test(e.target.textContent)) {
     e.preventDefault(); openInitPopup();
   }
 }, true);
@@ -504,25 +652,26 @@ document.addEventListener('click', e=>{
 function init() {
   hideBonusBanner();
   startLineAnimation();
-  setTimeout(()=>{
+  startTradeObserver();   // ← trade auto-detection shuru karo
+  setTimeout(() => {
     fixUrl(); hideBonusBanner(); updateFs593();
     showFloatingBtn(); updateUI();
-    if(autoPatti) startAutoPatti();
-    let n=0;
-    const t=setInterval(()=>{ hideBonusBanner(); if(++n>20) clearInterval(t); },500);
-  },1200);
+    if (autoPatti) startAutoPatti();
+    let n = 0;
+    const t = setInterval(() => { hideBonusBanner(); if (++n > 20) clearInterval(t); }, 500);
+  }, 1200);
 }
 
-// ─── License Check — STRICT ───────────────────────────────────────
-(async()=>{
+// ─── License Check ────────────────────────────────────────────────
+(async () => {
   const key = localStorage.getItem(KEY_LICENSE);
-  if(!key){ showLicensePopup(); return; }
+  if (!key) { showLicensePopup(); return; }
   try {
     const ctrl = new AbortController();
-    const t = setTimeout(()=>ctrl.abort(), 8000);
-    const res = await fetch(`${SCRIPT_URL}?key=${encodeURIComponent(key)}`,{signal:ctrl.signal});
+    const t    = setTimeout(() => ctrl.abort(), 8000);
+    const res  = await fetch(`${SCRIPT_URL}?key=${encodeURIComponent(key)}`, { signal: ctrl.signal });
     clearTimeout(t);
-    if((await res.text()).trim()==='active') { init(); }
+    if ((await res.text()).trim() === 'active') { init(); }
     else { localStorage.removeItem(KEY_LICENSE); showLicensePopup(); }
   } catch {
     localStorage.removeItem(KEY_LICENSE); showLicensePopup();
