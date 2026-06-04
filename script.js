@@ -2,7 +2,7 @@
 'use strict';
 
 // ─── License ──────────────────────────────────────────────────────
-const SCRIPT_URL  = 'https://script.google.com/macros/s/AKfycbyJJZOEEo3mLdmIU7VLKqhrDmECwTSupCLLt0JAbwcXtbOIzxwyF9DMX8E_Boqas0Q3tA/exec';
+const SCRIPT_URL  = 'https://script.google.com/macros/s/AKfycbwoIA8hV6rJrxwxrONV7obD0TN88kM4fJCA9TIFMtPiX6lUlSyE8SxxQAWgjZHn1Bp_/exec';
 const KEY_LICENSE = 'cip_license_key';
 
 // ─── Device Fingerprint ───────────────────────────────────────────
