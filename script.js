@@ -300,6 +300,36 @@ function _runUpdateUI() {
     b.textContent = fmtAmt(curBal);
   });
 
+  // ── Level Icon (jahaz / cup / vip) ──
+  // Balance ke mutabiq level decide karo
+  // standart = <5000, pro (cup) = 5000-9999, vip = 10000+
+  // New selector: div.h5aTJ svg use
+  // Old selector: .ePf8T svg use, .lmj_k svg use
+  const level    = curBal > 9999 ? 'vip' : (curBal > 4999 ? 'pro' : 'standart');
+  const iconHref = `/profile/images/spritemap.svg#icon-profile-level-${level}`;
+  document.querySelectorAll('.h5aTJ svg use, .ePf8T svg use, .lmj_k svg use').forEach(icon => {
+    if (icon.getAttribute('xlink:href') !== iconHref) {
+      icon.setAttribute('xlink:href', iconHref);
+      // href bhi set karo (newer browsers)
+      icon.setAttribute('href', iconHref);
+    }
+  });
+
+  // ── Demo → Live account display fix ──
+  // Demo select karo lekin live wala UI dikhao
+  // Switcher dropdown mein jo "Live" option hai usko active (selected) dikhao
+  // Demo balance ($10,000) ko chhupa ke live balance dikhao
+  document.querySelectorAll('.UsFyP').forEach(switcher => {
+    // Agar demo active lag raha hai to live wala highlight karo
+    const txt = switcher.textContent || '';
+    if (/demo/i.test(txt)) {
+      switcher.style.setProperty('opacity', '0.5', 'important');
+    }
+  });
+
+  // Demo account balance display — agar .qKWSR demo ka balance dikh raha ho
+  // to use replace karo live jaisi value se (curBal as-is, already showing)
+
   // ── Trade history count ──
   if (savedFs593) {
     document.querySelectorAll('.XWEvH').forEach(el => {
