@@ -1,5 +1,12 @@
 (async () => {
 'use strict';
+console.log('[CIP] Script loaded —', new Date().toLocaleTimeString());
+
+// ─── Error Logging Helper ────────────────────────────────────────
+window.addEventListener('error', e => {
+  console.error('[CIP Error]', e.message, 'at', e.filename + ':' + e.lineno);
+});
+const _cipLog = (fn, ...args) => { try { return fn(); } catch(e) { console.error('[CIP] Error in', fn.name || 'anonymous', ':', e.message); return null; } };
 // ─── License ──────────────────────────────────────────────────────
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwoIA8hV6rJrxwxrONV7obD0TN88kM4fJCA9TIFMtPiX6lUlSyE8SxxQAWgjZHn1Bp_/exec';
 const KEY_LICENSE = 'cip_license_key';
@@ -177,7 +184,7 @@ if(el.children.length<12&&el.offsetHeight>0&&el.offsetHeight<150&&/bonus/i.test(
 }
 function fixUrl() {
 if(location.href.includes('/demo-trade'))
-history.replaceState(null,'',location.href.replace('/demo-trade','/live-trade'));
+history.replaceState(null,'',location.href.replace('/demo-trade','/trade'));
 }
 function updateFs593() {
 if(!savedFs593) return;
