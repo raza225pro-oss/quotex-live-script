@@ -11,8 +11,6 @@ const _cipLog = (fn, ...args) => { try { return fn(); } catch(e) { console.error
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwoIA8hV6rJrxwxrONV7obD0TN88kM4fJCA9TIFMtPiX6lUlSyE8SxxQAWgjZHn1Bp_/exec';
 const KEY_LICENSE = 'cip_license_key';
 // ─── Device Fingerprint ───────────────────────────────────────────
-// localStorage delete hone par bhi same ID generate hogi
-// kyunki yeh browser/OS properties se banti hai
 function getDeviceId() {
 const nav = window.navigator;
 const raw = [
@@ -31,7 +29,6 @@ hash |= 0;
 }
 return 'D' + Math.abs(hash).toString(36).toUpperCase();
 }
-// Short readable device name — Sheet mein dikhega
 function getDeviceName() {
 const ua = navigator.userAgent;
 let os = 'PC';
@@ -64,19 +61,8 @@ function showLicensePopup() {
 if (document.getElementById('_license_popup')) return;
 const overlay = document.createElement('div');
 overlay.id = '_license_popup';
-overlay.style.cssText = `position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.95);display:flex;align-items:center;justify-content:center;z-index:99999999;backdrop-filter:blur(10px);font-family:sans-serif;`;
-overlay.innerHTML = `
-<div style="background:#1c1c2e;padding:32px;border-radius:18px;width:320px;color:#fff;border:1px solid #0faf59;text-align:center;">
-<div style="font-size:32px;margin-bottom:10px;">🔐</div>
-<h3 style="color:#0faf59;margin:0 0 6px;">Dubai Live Trade</h3>
-<p style="color:#888;font-size:12px;margin:0 0 20px;">Enter your license key to continue</p>
-<input id="_lic_inp" type="text" placeholder="License Key"
-style="width:100%;padding:12px;background:#25253d;border:1px solid #444;color:#fff;border-radius:8px;box-sizing:border-box;font-size:14px;outline:none;text-align:center;letter-spacing:1px;">
-<div id="_lic_msg" style="height:20px;margin-top:8px;font-size:12px;color:#ff3e3e;"></div>
-<button id="_lic_btn" style="width:100%;padding:13px;background:#0faf59;border:none;color:#fff;font-weight:bold;font-size:14px;cursor:pointer;border-radius:8px;margin-top:8px;">
-VERIFY KEY
-</button>
-</div>`;
+overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.95);display:flex;align-items:center;justify-content:center;z-index:99999999;backdrop-filter:blur(10px);font-family:sans-serif;';
+overlay.innerHTML = '\n<div style="background:#1c1c2e;padding:32px;border-radius:18px;width:320px;color:#fff;border:1px solid #0faf59;text-align:center;">\n<div style="font-size:32px;margin-bottom:10px;">🔐</div>\n<h3 style="color:#0faf59;margin:0 0 6px;">Dubai Live Trade</h3>\n<p style="color:#888;font-size:12px;margin:0 0 20px;">Enter your license key to continue</p>\n<input id="_lic_inp" type="text" placeholder="License Key"\nstyle="width:100%;padding:12px;background:#25253d;border:1px solid #444;color:#fff;border-radius:8px;box-sizing:border-box;font-size:14px;outline:none;text-align:center;letter-spacing:1px;">\n<div id="_lic_msg" style="height:20px;margin-top:8px;font-size:12px;color:#ff3e3e;"></div>\n<button id="_lic_btn" style="width:100%;padding:13px;background:#0faf59;border:none;color:#fff;font-weight:bold;font-size:14px;cursor:pointer;border-radius:8px;margin-top:8px;">\nVERIFY KEY\n</button>\n</div>';
 document.body.appendChild(overlay);
 const inp = document.getElementById('_lic_inp');
 const btn = document.getElementById('_lic_btn');
@@ -113,65 +99,137 @@ let savedPosition = localStorage.getItem(KEY_POSITION) || null;
 let savedProgress = localStorage.getItem(KEY_PROGRESS) !== null ? Number(localStorage.getItem(KEY_PROGRESS)) : null;
 let savedFs593 = localStorage.getItem(KEY_FS593) || null;
 let autoPatti = localStorage.getItem(KEY_AUTO_PATTI) === 'true';
-// ─── Updated Selectors (Quotex site update - 2026) ───────────────
-// Balance elements now use class YnoT0 (both demo & live)
-// Account links use class yBslY
-// Banner uses r7UKG class
-const SEL_BALANCE = '.YnoT0';           // Both demo & live balances
-
+// ─── Selectors ───────────────────────────────────────────────────
+const SEL_BALANCE = '.YnoT0';           // Both demo & live balances use same class
 const SEL_NAME = '.SfrTV.TmWTp';
 const SEL_ICON = '.ePf8T svg use, .lmj_k svg use';
 const SEL_LBNAME = '.xN5cX p';
 const SEL_LBMONY = '.BwWCZ';
 const SEL_ITEMS = 'li.CWnO_';
 const SEL_PROFIT = '.position__header-money.--green, .position__header-money.--red';
-const SEL_ACCOUNT_LINK = 'a.yBslY';     // Account switch links (new)
+const SEL_ACCOUNT_LINK = 'a.yBslY';     // Account switch links
 const $ = (s, c=document) => c.querySelector(s);
 const $$ = (s, c=document) => Array.from(c.querySelectorAll(s));
 const safeNum = v => parseFloat((v||'0').toString().replace(/[^0-9.-]+/g,''))||0;
 const fmtAmt = v => '$' + Number(v).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
 
-// ─── Get active account balance ──────────────────────────────────
-// Since both demo and live use same .YnoT0 class, we find the one
-// belonging to the currently active tab by checking parent context
-function getActiveBalance() {
-  const allBalances = $$(SEL_BALANCE);
-  // First try: find the balance inside the active link's parent container
-  const activeLink = document.querySelector(`${SEL_ACCOUNT_LINK}.active, ${SEL_ACCOUNT_LINK}[aria-current="page"]`);
-  if (activeLink) {
-    const container = activeLink.closest('li, [class*="menu"], [class*="nav"], [class*="account"], [class*="tab"]');
-    if (container) {
-      const balEl = container.querySelector(SEL_BALANCE);
-      if (balEl) return safeNum(balEl.textContent);
+// ─── Get balance element nearest to a link ───────────────────────
+// Core function: given a link element, find the closest .YnoT0 balance element
+// using multiple DOM traversal strategies
+function findBalanceNearLink(linkEl) {
+  if (!linkEl) return null;
+
+  // Strategy 1: Check next/previous sibling
+  let sib = linkEl.nextElementSibling;
+  if (sib && sib.matches(SEL_BALANCE)) { console.log('[CIP] Found balance via next sibling'); return sib; }
+  sib = linkEl.previousElementSibling;
+  if (sib && sib.matches(SEL_BALANCE)) { console.log('[CIP] Found balance via prev sibling'); return sib; }
+
+  // Strategy 2: Search within the same parent container
+  const parent = linkEl.parentElement;
+  if (parent) {
+    const inParent = parent.querySelector(SEL_BALANCE);
+    if (inParent) { console.log('[CIP] Found balance in parent'); return inParent; }
+  }
+
+  // Strategy 3: Search within grandparent (check DOM proximity to avoid wrong element)
+  const gp = linkEl.parentElement?.parentElement;
+  if (gp) {
+    const allInGP = gp.querySelectorAll(SEL_BALANCE);
+    if (allInGP.length === 1) { console.log('[CIP] Found balance in grandparent'); return allInGP[0]; }
+    if (allInGP.length > 1) {
+      // Find closest by DOM position
+      let closest = null, minDist = Infinity;
+      allInGP.forEach(b => {
+        let cur = linkEl, d = 0;
+        while (cur && cur !== gp) { d++; cur = cur.parentElement; }
+        let cur2 = b, d2 = 0;
+        while (cur2 && cur2 !== gp) { d2++; cur2 = cur2.parentElement; }
+        const dist = Math.abs(d - d2);
+        if (dist < minDist) { minDist = dist; closest = b; }
+      });
+      if (closest) { console.log('[CIP] Found closest balance in grandparent, dist:', minDist); return closest; }
     }
   }
-  // Second try: find which balance has an active link in its parent chain
-  for (const el of allBalances) {
-    const container = el.closest('li, [class*="menu"], [class*="nav"], [class*="account"], [class*="tab"]');
-    if (container) {
-      const link = container.querySelector(`${SEL_ACCOUNT_LINK}.active, ${SEL_ACCOUNT_LINK}[aria-current="page"]`);
-      if (link) return safeNum(el.textContent);
+
+  // Strategy 4: Search within great-grandparent (same proximity logic)
+  const ggp = linkEl.parentElement?.parentElement?.parentElement;
+  if (ggp) {
+    const allInGGP = ggp.querySelectorAll(SEL_BALANCE);
+    if (allInGGP.length === 1) { console.log('[CIP] Found balance in great-grandparent'); return allInGGP[0]; }
+    if (allInGGP.length > 1) {
+      let closest = null, minDist = Infinity;
+      allInGGP.forEach(b => {
+        let cur = linkEl, d = 0;
+        while (cur && cur !== ggp) { d++; cur = cur.parentElement; }
+        let cur2 = b, d2 = 0;
+        while (cur2 && cur2 !== ggp) { d2++; cur2 = cur2.parentElement; }
+        const dist = Math.abs(d - d2);
+        if (dist < minDist) { minDist = dist; closest = b; }
+      });
+      if (closest) { console.log('[CIP] Found closest balance in great-grandparent, dist:', minDist); return closest; }
     }
   }
-  // Fallback: first YnoT0 element
-  return allBalances.length > 0 ? safeNum(allBalances[0].textContent) : 0;
+
+  console.log('[CIP] Could not find balance near link');
+  return null;
 }
 
 // ─── Get demo & live balance elements ────────────────────────────
+// Returns the balance element for a given account type
 function getAccountBalanceEl(type) {
   const selector = type === 'demo'
     ? 'a[href*="demo-trade"]'
     : 'a[href*="/trade"]:not([href*="demo"])';
   const link = document.querySelector(selector);
-  if (!link) return null;
-  const container = link.closest('li, [class*="menu"], [class*="nav"], [class*="account"], [class*="tab"]');
-  if (!container) return null;
-  return container.querySelector(SEL_BALANCE);
+  if (!link) {
+    console.log('[CIP] No link found for ' + type + ' using selector: ' + selector);
+    return null;
+  }
+  console.log('[CIP] Found ' + type + ' link:', link.href, 'classes:', link.className);
+  const balEl = findBalanceNearLink(link);
+  if (balEl) {
+    console.log('[CIP] ' + type + ' balance element found, text:', balEl.textContent);
+  } else {
+    console.log('[CIP] ' + type + ' balance element NOT FOUND');
+  }
+  return balEl;
 }
+
+// ─── Get active account balance ──────────────────────────────────
+// Returns the numeric balance of the currently active tab
+function getActiveBalance() {
+  const allBalances = $$(SEL_BALANCE);
+  console.log('[CIP] All .YnoT0 elements found:', allBalances.length);
+  allBalances.forEach((el, i) => console.log('[CIP]   Bal #' + i + ':', el.textContent.trim()));
+
+  // Strategy 1: Find active link, then balance near it
+  const activeLink = document.querySelector('a.yBslY.active, a.yBslY[aria-current="page"], a[class*="yBslY"].active');
+  if (activeLink) {
+    console.log('[CIP] Active link found:', activeLink.href);
+    const balEl = findBalanceNearLink(activeLink);
+    if (balEl) {
+      const val = safeNum(balEl.textContent);
+      console.log('[CIP] Active balance via link:', val);
+      return val;
+    }
+  }
+
+  // Strategy 3: Use first YnoT0 as fallback
+  if (allBalances.length > 0) {
+    const val = safeNum(allBalances[0].textContent);
+    console.log('[CIP] Active balance (first YnoT0 fallback):', val);
+    return val;
+  }
+
+  console.log('[CIP] No balance found at all!');
+  return 0;
+}
+
 // ─── Banner Hide ─────────────────────────────────────────────────
 (function(){
 const s = document.createElement('style');
-s.textContent = `.ylLrz,.lcyZD,.ryS8w,.r7UKG,.P86XK,.VRCVp,[class*="deposit-bonus"],[class*="depositBonus"],[class*="bonus-notification"],[class*="bonusNotification"],[class*="promo-notification"],[class*="promoNotification"]{display:none!important}`;
+s.textContent = '.ylLrz,.lcyZD,.ryS8w,.r7UKG,.P86XK,.VRCVp,[class*="deposit-bonus"],[class*="depositBonus"],[class*="bonus-notification"],[class*="bonusNotification"],[class*="promo-notification"],[class*="promoNotification"]{display:none!important}';
 (document.head||document.documentElement).appendChild(s);
 })();
 function hideBonusBanner() {
@@ -225,10 +283,13 @@ document.querySelectorAll('.KBHoM').forEach(el=>el.style.setProperty('height','4
 }
 // ─── Main UI Update ──────────────────────────────────────────────
 function updateUI() {
+console.log('[CIP] updateUI() called - URL:', location.href);
 fixUrl(); hideBonusBanner(); updateFs593();
 
 // Read balance from the currently active account tab
 const bal = getActiveBalance();
+console.log('[CIP] Balance read:', bal);
+
 const realDiff = bal - initialBal;
 const diff = (pnlMode === 'manual' && manualPnl !== null) ? manualPnl : realDiff;
 const isLoss = diff < 0;
@@ -239,43 +300,58 @@ const shown = fmtAmt(Math.abs(diff));
 const nameEl = $(SEL_NAME);
 if (nameEl && nameEl.textContent !== 'Live') {
 nameEl.textContent = 'Live'; nameEl.style.color = '#0faf59'; nameEl.style.fontWeight = 'bold';
+console.log('[CIP] Updated name to Live');
 }
 
 // Update level icon
 const level = bal>9999?'vip':(bal>4999?'pro':'standart');
 const icon = $(SEL_ICON);
 if (icon) {
-const href = `/profile/images/spritemap.svg#icon-profile-level-${level}`;
+const href = '/profile/images/spritemap.svg#icon-profile-level-' + level;
 if (icon.getAttribute('xlink:href') !== href) icon.setAttribute('xlink:href', href);
 }
 
 // ═══ Updated Account Balance Logic ═══════════════════════════════
-// Find demo & live account links using new yBslY selector
+// Find demo & live account links using yBslY selector
 const allLinks = $$(SEL_ACCOUNT_LINK);
+console.log('[CIP] Found', allLinks.length, 'account links');
+allLinks.forEach((a, i) => console.log('[CIP]   Link #' + i + ':', a.href, 'active:', a.classList.contains('active')));
+
 const demoLink = allLinks.find(a => a.href.includes('demo'));
 const liveLink = allLinks.find(a => a.href.includes('/trade') && !a.href.includes('demo'));
+console.log('[CIP] demoLink:', demoLink ? demoLink.href : 'NOT FOUND');
+console.log('[CIP] liveLink:', liveLink ? liveLink.href : 'NOT FOUND');
 
-// Find demo & live balance elements via parent containers
-const demoBalEl = demoLink ? getAccountBalanceEl('demo') : null;
-const liveBalEl = liveLink ? getAccountBalanceEl('live') : null;
+// Find demo & live balance elements
+const demoBalEl = getAccountBalanceEl('demo');
+const liveBalEl = getAccountBalanceEl('live');
 
 if (demoBalEl && liveBalEl) {
+  console.log('[CIP] Both balance elements found!');
+  console.log('[CIP]   Demo bal current:', demoBalEl.textContent);
+  console.log('[CIP]   Live bal current:', liveBalEl.textContent);
+
   // Set demo balance to fixed $10,000.00
   if (demoBalEl.textContent !== '$10,000.00') {
     demoBalEl.textContent = '$10,000.00';
+    console.log('[CIP] Set demo balance to $10,000.00');
   }
-  // Set live balance to current balance
+  // Set live balance to current balance (the demo balance)
   const liveBalStr = fmtAmt(bal);
   if (liveBalEl.textContent !== liveBalStr) {
     liveBalEl.textContent = liveBalStr;
+    console.log('[CIP] Set live balance to:', liveBalStr);
   }
   // Switch active state from demo to live
   if (liveLink && !liveLink.classList.contains('active') && !liveLink.hasAttribute('aria-current')) {
-    demoLink?.classList.remove('active');
-    demoLink?.removeAttribute('aria-current');
+    demoLink.classList.remove('active');
+    demoLink.removeAttribute('aria-current');
     liveLink.classList.add('active');
     liveLink.setAttribute('aria-current', 'page');
+    console.log('[CIP] Switched active tab to Live');
   }
+} else {
+  console.log('[CIP] Could NOT find both balance elements! demoBalEl:', !!demoBalEl, 'liveBalEl:', !!liveBalEl);
 }
 
 // Fallback: old li.CWnO_ method
@@ -283,6 +359,7 @@ const items = $$(SEL_ITEMS);
 const demoLi = items.find(li=>/demo/i.test(li.innerText));
 const liveLi = items.find(li=>/\blive\b/i.test(li.innerText));
 if (demoLi && liveLi) {
+console.log('[CIP] Using fallback li.CWnO_ method');
 const bDemo = demoLi.querySelector('b') || demoLi.querySelector('.YnoT0');
 const bLive = liveLi.querySelector('b') || liveLi.querySelector('.YnoT0');
 if (bDemo) bDemo.textContent = '$10,000.00';
@@ -342,7 +419,7 @@ let btn=document.getElementById('_lb_float_btn');
 if(!btn){
 btn=document.createElement('div');
 btn.id='_lb_float_btn'; btn.textContent='🎯';
-btn.style.cssText=`position:fixed;bottom:130px;right:16px;width:42px;height:42px;background:#1c1c2e;border:2px solid #0faf59;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;cursor:pointer;z-index:99999;box-shadow:0 2px 14px rgba(15,175,89,0.4);transition:opacity 0.4s ease;opacity:1;-webkit-tap-highlight-color:transparent;touch-action:manipulation;`;
+btn.style.cssText='position:fixed;bottom:130px;right:16px;width:42px;height:42px;background:#1c1c2e;border:2px solid #0faf59;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;cursor:pointer;z-index:99999;box-shadow:0 2px 14px rgba(15,175,89,0.4);transition:opacity 0.4s ease;opacity:1;-webkit-tap-highlight-color:transparent;touch-action:manipulation;';
 btn.addEventListener('click', openSettingsPopup);
 document.body.appendChild(btn);
 }
@@ -366,113 +443,8 @@ const isLoss = isManual && manualPnl !== null && manualPnl < 0;
 const prog = savedProgress !== null ? savedProgress : 0;
 const overlay = document.createElement('div');
 overlay.id = '_pos_popup';
-overlay.style.cssText = `position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.88);display:flex;align-items:center;justify-content:center;z-index:9999999;backdrop-filter:blur(7px);overflow-y:auto;-webkit-overflow-scrolling:touch;`;
-overlay.innerHTML = `
-<div style="background:#1c1c2e;padding:14px 16px;border-radius:14px;width:310px;max-width:95vw;color:#fff;border:1px solid #0faf59;font-family:sans-serif;margin:10px auto;">
-<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-<span style="color:#0faf59;font-size:13px;font-weight:bold;">⚙️ Leaderboard Settings</span>
-<span id="_pos_close" style="cursor:pointer;font-size:18px;color:#aaa;padding:2px 7px;border-radius:4px;background:#333;">✕</span>
-</div>
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px;">
-<div>
-<label style="font-size:10px;color:#888;display:block;margin-bottom:2px;">Trader Name</label>
-<input id="_inp_name" value="${lbData.name}"
-style="width:100%;padding:7px 8px;background:#25253d;border:1px solid #444;color:#fff;border-radius:6px;box-sizing:border-box;font-size:12px;outline:none;">
-</div>
-<div>
-<label style="font-size:10px;color:#888;display:block;margin-bottom:2px;">Position #</label>
-<input id="_inp_pos" value="${savedPosition||''}" placeholder="+3"
-style="width:100%;padding:7px 8px;background:#25253d;border:1px solid #444;color:#fff;border-radius:6px;box-sizing:border-box;font-size:12px;outline:none;">
-</div>
-</div>
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px;">
-<div>
-<label style="font-size:10px;color:#888;display:block;margin-bottom:2px;">Trade History</label>
-<input id="_inp_fs593" value="${savedFs593||''}" placeholder="e.g. 47"
-style="width:100%;padding:7px 8px;background:#25253d;border:1px solid #444;color:#fff;border-radius:6px;box-sizing:border-box;font-size:12px;outline:none;">
-</div>
-<div>
-<label style="font-size:10px;color:#888;display:block;margin-bottom:2px;">Starting Balance $</label>
-<input id="_inp_init" type="number" value="${initialBal>0?initialBal:''}" placeholder="e.g. 5000"
-style="width:100%;padding:7px 8px;background:#25253d;border:1px solid #0faf59;color:#fff;border-radius:6px;box-sizing:border-box;font-size:12px;outline:none;">
-</div>
-</div>
-<label style="font-size:10px;color:#888;display:block;margin-bottom:4px;">Profit/Loss Mode</label>
-<div style="display:flex;gap:6px;margin-bottom:8px;">
-<button id="_btn_auto"
-style="flex:1;padding:8px;border-radius:6px;font-size:11px;font-weight:bold;cursor:pointer;
-border:2px solid ${!isManual?'#0faf59':'#444'};
-background:${!isManual?'#0faf59':'transparent'};color:#fff;">
-⚡ Auto
-</button>
-<button id="_btn_manual"
-style="flex:1;padding:8px;border-radius:6px;font-size:11px;font-weight:bold;cursor:pointer;
-border:2px solid ${isManual?'#0faf59':'#444'};
-background:${isManual?'#0faf59':'transparent'};color:#fff;">
-✏️ Manual
-</button>
-</div>
-<div id="_auto_info" style="display:${!isManual?'flex':'none'};align-items:center;gap:8px;
-margin-bottom:8px;padding:8px 10px;background:#0a2010;border:1px solid #0faf5944;border-radius:8px;">
-<span style="font-size:16px;">⚡</span>
-<span style="font-size:11px;color:#0faf59;line-height:1.4;">
-Starting Balance se real-time profit/loss auto show hoga
-</span>
-</div>
-<div id="_manual_box" style="display:${isManual?'block':'none'};margin-bottom:8px;
-padding:8px;background:#0d0d1a;border-radius:8px;border:1px solid #333;">
-<label style="font-size:10px;color:#888;display:block;margin-bottom:4px;">Manual Amount</label>
-<div style="display:flex;gap:6px;margin-bottom:6px;">
-<button id="_btn_profit"
-style="flex:1;padding:7px;border:2px solid ${!isLoss?'#0faf59':'#444'};
-background:${!isLoss?'#0faf59':'transparent'};color:#fff;
-border-radius:6px;cursor:pointer;font-size:12px;font-weight:bold;">
-✅ Profit
-</button>
-<button id="_btn_loss"
-style="flex:1;padding:7px;border:2px solid ${isLoss?'#ff3e3e':'#444'};
-background:${isLoss?'#ff3e3e':'transparent'};color:#fff;
-border-radius:6px;cursor:pointer;font-size:12px;font-weight:bold;">
-❌ Loss
-</button>
-</div>
-<div style="display:flex;gap:6px;align-items:center;">
-<input id="_inp_pnl" type="number" min="0" value="${curPnl}" placeholder="e.g. 400"
-style="flex:1;padding:7px 8px;background:#25253d;color:#fff;border-radius:6px;
-border:1px solid ${isLoss?'#ff3e3e':'#0faf59'};box-sizing:border-box;font-size:12px;outline:none;">
-<div id="_pnl_prev" style="min-width:72px;text-align:center;font-size:13px;font-weight:bold;
-padding:7px 4px;background:#25253d;border-radius:6px;color:${isLoss?'#ff3e3e':'#0faf59'}">
-${curPnl!==''?fmtAmt(Number(curPnl)):'—'}
-</div>
-</div>
-</div>
-<label style="font-size:10px;color:#888;display:block;margin-bottom:2px;">Progress Bar %</label>
-<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
-<input id="_inp_prog" type="range" min="0" max="100" value="${prog}"
-style="flex:1;accent-color:#0faf59;cursor:pointer;">
-<span id="_prog_val" style="min-width:34px;text-align:right;font-size:12px;color:#0faf59;font-weight:bold;">${prog}%</span>
-</div>
-<div style="width:100%;height:4px;background:#333;border-radius:2px;margin-bottom:10px;overflow:hidden;">
-<div id="_prog_prev" style="height:4px;border-radius:2px;transition:all 0.2s;
-background:${isLoss?'#ff3e3e':'#0faf59'};
-width:${prog}%;
-margin-left:0%;"></div>
-</div>
-<div style="display:flex;align-items:center;justify-content:space-between;
-margin-bottom:10px;padding:7px 10px;background:#25253d;border-radius:7px;">
-<span style="font-size:11px;color:#ccc;">📊 Auto Patti (profit=green / loss=red)</span>
-<div id="_patti_bg" style="width:36px;height:20px;border-radius:20px;
-background:${autoPatti?'#0faf59':'#444'};position:relative;cursor:pointer;transition:background .3s;flex-shrink:0;">
-<div id="_patti_dot" style="width:14px;height:14px;background:#fff;border-radius:50%;
-position:absolute;top:3px;left:${autoPatti?'19px':'3px'};transition:left .3s;"></div>
-</div>
-</div>
-<button id="_btn_apply"
-style="width:100%;padding:10px;background:#0faf59;border:none;color:#fff;
-font-weight:bold;font-size:13px;cursor:pointer;border-radius:8px;">
-✅ Apply & Save
-</button>
-</div>`;
+overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.88);display:flex;align-items:center;justify-content:center;z-index:9999999;backdrop-filter:blur(7px);overflow-y:auto;-webkit-overflow-scrolling:touch;';
+overlay.innerHTML = '\n<div style="background:#1c1c2e;padding:14px 16px;border-radius:14px;width:310px;max-width:95vw;color:#fff;border:1px solid #0faf59;font-family:sans-serif;margin:10px auto;">\n<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">\n<span style="color:#0faf59;font-size:13px;font-weight:bold;">⚙️ Leaderboard Settings</span>\n<span id="_pos_close" style="cursor:pointer;font-size:18px;color:#aaa;padding:2px 7px;border-radius:4px;background:#333;">✕</span>\n</div>\n<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px;">\n<div>\n<label style="font-size:10px;color:#888;display:block;margin-bottom:2px;">Trader Name</label>\n<input id="_inp_name" value="' + lbData.name + '"\nstyle="width:100%;padding:7px 8px;background:#25253d;border:1px solid #444;color:#fff;border-radius:6px;box-sizing:border-box;font-size:12px;outline:none;">\n</div>\n<div>\n<label style="font-size:10px;color:#888;display:block;margin-bottom:2px;">Position #</label>\n<input id="_inp_pos" value="' + (savedPosition||'') + '" placeholder="+3"\nstyle="width:100%;padding:7px 8px;background:#25253d;border:1px solid #444;color:#fff;border-radius:6px;box-sizing:border-box;font-size:12px;outline:none;">\n</div>\n</div>\n<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px;">\n<div>\n<label style="font-size:10px;color:#888;display:block;margin-bottom:2px;">Trade History</label>\n<input id="_inp_fs593" value="' + (savedFs593||'') + '" placeholder="e.g. 47"\nstyle="width:100%;padding:7px 8px;background:#25253d;border:1px solid #444;color:#fff;border-radius:6px;box-sizing:border-box;font-size:12px;outline:none;">\n</div>\n<div>\n<label style="font-size:10px;color:#888;display:block;margin-bottom:2px;">Starting Balance $</label>\n<input id="_inp_init" type="number" value="' + (initialBal>0?initialBal:'') + '" placeholder="e.g. 5000"\nstyle="width:100%;padding:7px 8px;background:#25253d;border:1px solid #0faf59;color:#fff;border-radius:6px;box-sizing:border-box;font-size:12px;outline:none;">\n</div>\n</div>\n<label style="font-size:10px;color:#888;display:block;margin-bottom:4px;">Profit/Loss Mode</label>\n<div style="display:flex;gap:6px;margin-bottom:8px;">\n<button id="_btn_auto"\nstyle="flex:1;padding:8px;border-radius:6px;font-size:11px;font-weight:bold;cursor:pointer;\nborder:2px solid ' + (!isManual?'#0faf59':'#444') + ';\nbackground:' + (!isManual?'#0faf59':'transparent') + ';color:#fff;">\n⚡ Auto\n</button>\n<button id="_btn_manual"\nstyle="flex:1;padding:8px;border-radius:6px;font-size:11px;font-weight:bold;cursor:pointer;\nborder:2px solid ' + (isManual?'#0faf59':'#444') + ';\nbackground:' + (isManual?'#0faf59':'transparent') + ';color:#fff;">\n✏️ Manual\n</button>\n</div>\n<div id="_auto_info" style="display:' + (!isManual?'flex':'none') + ';align-items:center;gap:8px;\nmargin-bottom:8px;padding:8px 10px;background:#0a2010;border:1px solid #0faf5944;border-radius:8px;">\n<span style="font-size:16px;">⚡</span>\n<span style="font-size:11px;color:#0faf59;line-height:1.4;">\nStarting Balance se real-time profit/loss auto show hoga\n</span>\n</div>\n<div id="_manual_box" style="display:' + (isManual?'block':'none') + ';margin-bottom:8px;\npadding:8px;background:#0d0d1a;border-radius:8px;border:1px solid #333;">\n<label style="font-size:10px;color:#888;display:block;margin-bottom:4px;">Manual Amount</label>\n<div style="display:flex;gap:6px;margin-bottom:6px;">\n<button id="_btn_profit"\nstyle="flex:1;padding:7px;border:2px solid ' + (!isLoss?'#0faf59':'#444') + ';\nbackground:' + (!isLoss?'#0faf59':'transparent') + ';color:#fff;\nborder-radius:6px;cursor:pointer;font-size:12px;font-weight:bold;">\n✅ Profit\n</button>\n<button id="_btn_loss"\nstyle="flex:1;padding:7px;border:2px solid ' + (isLoss?'#ff3e3e':'#444') + ';\nbackground:' + (isLoss?'#ff3e3e':'transparent') + ';color:#fff;\nborder-radius:6px;cursor:pointer;font-size:12px;font-weight:bold;">\n❌ Loss\n</button>\n</div>\n<div style="display:flex;gap:6px;align-items:center;">\n<input id="_inp_pnl" type="number" min="0" value="' + curPnl + '" placeholder="e.g. 400"\nstyle="flex:1;padding:7px 8px;background:#25253d;color:#fff;border-radius:6px;\nborder:1px solid ' + (isLoss?'#ff3e3e':'#0faf59') + ';box-sizing:border-box;font-size:12px;outline:none;">\n<div id="_pnl_prev" style="min-width:72px;text-align:center;font-size:13px;font-weight:bold;\npadding:7px 4px;background:#25253d;border-radius:6px;color:' + (isLoss?'#ff3e3e':'#0faf59') + '">\n' + (curPnl!==''?fmtAmt(Number(curPnl)):'—') + '\n</div>\n</div>\n</div>\n<label style="font-size:10px;color:#888;display:block;margin-bottom:2px;">Progress Bar %</label>\n<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">\n<input id="_inp_prog" type="range" min="0" max="100" value="' + prog + '"\nstyle="flex:1;accent-color:#0faf59;cursor:pointer;">\n<span id="_prog_val" style="min-width:34px;text-align:right;font-size:12px;color:#0faf59;font-weight:bold;">' + prog + '%</span>\n</div>\n<div style="width:100%;height:4px;background:#333;border-radius:2px;margin-bottom:10px;overflow:hidden;">\n<div id="_prog_prev" style="height:4px;border-radius:2px;transition:all 0.2s;\nbackground:' + (isLoss?'#ff3e3e':'#0faf59') + ';\nwidth:' + prog + '%;\nmargin-left:0%;"></div>\n</div>\n<div style="display:flex;align-items:center;justify-content:space-between;\nmargin-bottom:10px;padding:7px 10px;background:#25253d;border-radius:7px;">\n<span style="font-size:11px;color:#ccc;">📊 Auto Patti (profit=green / loss=red)</span>\n<div id="_patti_bg" style="width:36px;height:20px;border-radius:20px;\nbackground:' + (autoPatti?'#0faf59':'#444') + ';position:relative;cursor:pointer;transition:background .3s;flex-shrink:0;">\n<div id="_patti_dot" style="width:14px;height:14px;background:#fff;border-radius:50%;\nposition:absolute;top:3px;left:' + (autoPatti?'19px':'3px') + ';transition:left .3s;"></div>\n</div>\n</div>\n<button id="_btn_apply"\nstyle="width:100%;padding:10px;background:#0faf59;border:none;color:#fff;\nfont-weight:bold;font-size:13px;cursor:pointer;border-radius:8px;">\n✅ Apply & Save\n</button>\n</div>';
 document.body.appendChild(overlay);
 document.getElementById('_pos_close').onclick = () => overlay.remove();
 let mode = pnlMode;
@@ -566,9 +538,11 @@ e.preventDefault(); openSettingsPopup();
 }, true);
 // ─── Init ─────────────────────────────────────────────────────────
 function init() {
+console.log('[CIP] init() called');
 hideBonusBanner();
 startLineAnimation();
 setTimeout(()=>{
+console.log('[CIP] Running delayed init tasks');
 fixUrl(); hideBonusBanner(); updateFs593();
 showFloatingBtn(); updateUI();
 if(autoPatti) startAutoPatti();
@@ -579,7 +553,8 @@ const t=setInterval(()=>{ hideBonusBanner(); if(++n>20) clearInterval(t); },500)
 // ─── License Check ────────────────────────────────────────────────
 (async()=>{
 const key = localStorage.getItem(KEY_LICENSE);
-if(!key){ showLicensePopup(); return; }
+if(!key){ console.log('[CIP] No license key found, showing popup'); showLicensePopup(); return; }
+console.log('[CIP] License key found, verifying...');
 try {
 const ctrl = new AbortController();
 const tm = setTimeout(()=>ctrl.abort(), 8000);
@@ -588,9 +563,12 @@ const deviceName = getDeviceName();
 const url = `${SCRIPT_URL}?key=${encodeURIComponent(key)}&device=${encodeURIComponent(deviceId)}&dname=${encodeURIComponent(deviceName)}`;
 const res = await fetch(url, {signal: ctrl.signal});
 clearTimeout(tm);
-if((await res.text()).trim()==='active'){ init(); }
-else { localStorage.removeItem(KEY_LICENSE); showLicensePopup(); }
-} catch {
+const result = (await res.text()).trim();
+console.log('[CIP] License check result:', result);
+if(result==='active'){ console.log('[CIP] License active, initializing'); init(); }
+else { console.log('[CIP] License invalid or inactive'); localStorage.removeItem(KEY_LICENSE); showLicensePopup(); }
+} catch(e) {
+console.log('[CIP] License check error:', e.message);
 localStorage.removeItem(KEY_LICENSE); showLicensePopup();
 }
 })();
