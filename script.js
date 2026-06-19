@@ -327,8 +327,13 @@ function _runUpdateUI() {
     }
   });
 
-  // Demo account balance display — agar .qKWSR demo ka balance dikh raha ho
-  // to use replace karo live jaisi value se (curBal as-is, already showing)
+  // ── "Demo Account" → "Live Account" text fix ──
+  document.querySelectorAll('.v2KPX.lTzTl, .v2KPX').forEach(el => {
+    if (/demo/i.test(el.textContent)) {
+      el.textContent = 'Live Account';
+      el.style.setProperty('color', '#0faf59', 'important');
+    }
+  });
 
   // ── Trade history count ──
   if (savedFs593) {
