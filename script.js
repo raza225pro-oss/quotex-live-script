@@ -200,18 +200,34 @@ function startTradeObserver() {
 (function () {
   const s = document.createElement('style');
   s.textContent = `
-    .r7UKG,.ylLrz,.lcyZD,.ryS8w,
+    .r7UKG,.P86XK,.ylLrz,.lcyZD,.ryS8w,.rGMix,.s3s3P,
     [class*="deposit-bonus"],[class*="depositBonus"],
     [class*="bonus-notification"],[class*="bonusNotification"],
-    [class*="promo-notification"],[class*="promoNotification"]
-    {display:none!important}
+    [class*="promo-notification"],[class*="promoNotification"],
+    [class*="rocket"],[class*="banner"],[class*="50%"]
+    {display:none!important;visibility:hidden!important;opacity:0!important;height:0!important;overflow:hidden!important;}
   `;
   (document.head || document.documentElement).appendChild(s);
 })();
 
 function hideBonusBanner() {
-  document.querySelectorAll('.r7UKG,.ylLrz,.lcyZD,.ryS8w,.rGMix,.s3s3P')
-    .forEach(el => el.style.setProperty('display', 'none', 'important'));
+  // All known banner selectors — desktop + mobile
+  document.querySelectorAll('.r7UKG,.P86XK,.ylLrz,.lcyZD,.ryS8w,.rGMix,.s3s3P').forEach(el => {
+    el.style.setProperty('display',    'none',   'important');
+    el.style.setProperty('visibility', 'hidden', 'important');
+    el.style.setProperty('height',     '0',      'important');
+    el.style.setProperty('overflow',   'hidden', 'important');
+  });
+  // Text-based scan — "50%" wala koi bhi element
+  document.querySelectorAll('*').forEach(el => {
+    if (el.children.length < 8 &&
+        el.offsetHeight > 0 && el.offsetHeight < 120 &&
+        /50\s*%/i.test(el.innerText || '') &&
+        /bonus|deposit|rocket/i.test(el.innerText || '')) {
+      const target = el.closest('[class*="banner"],[class*="promo"],[class*="bonus"],[class*="notification"],[class*="rocket"]') || el;
+      target.style.setProperty('display', 'none', 'important');
+    }
+  });
 }
 
 function fixUrl() {
