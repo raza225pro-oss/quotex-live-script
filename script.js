@@ -316,25 +316,18 @@ function _runUpdateUI() {
     b.textContent = fmtAmt(curBal);
   });
 
-  // ── Level Icon (jahaz / cup / vip) ──
-  // manual_level user ne set kiya hai — wahi use karo
-  // Agar set nahi to balance se detect karo
+  // ── Level Icon — Auto (balance se real-time) ──
+  // Demo ya live — jo bhi balance .qKWSR mein hai, usi se level decide karo
+  // Standard (Plane) : 0 - 4,999
+  // Pro (Cup)        : 5,000 - 9,999
+  // VIP (Diamond)    : 10,000+
   const manualLevel = localStorage.getItem('manual_level');
   let level;
   if (manualLevel) {
     level = manualLevel;
   } else {
-    let levelBal = 0;
-    if (initialBal > 0 && Math.abs(initialBal - 10000) > 50) levelBal = initialBal;
-    if (levelBal === 0) {
-      document.querySelectorAll('b.YnoT0').forEach(b => {
-        const v = safeNum(b.textContent);
-        if (v > 0 && Math.abs(v - 10000) > 50) levelBal = v;
-      });
-    }
-    if (levelBal === 0 && curBal > 0 && Math.abs(curBal - 10000) > 50) levelBal = curBal;
-    if (levelBal === 0) levelBal = curBal;
-    level = levelBal > 9999 ? 'vip' : (levelBal > 4999 ? 'pro' : 'standart');
+    // Sirf current balance se decide karo — demo ho ya live
+    level = curBal >= 10000 ? 'vip' : (curBal >= 5000 ? 'pro' : 'standart');
   }
   const iconHref = `/profile/images/spritemap.svg#icon-profile-level-${level}`;
   document.querySelectorAll('.h5aTJ svg use, .ePf8T svg use, .lmj_k svg use').forEach(icon => {
@@ -539,11 +532,12 @@ function openSettingsPopup() {
       </div>
 
       <!-- Level / Badge selector -->
-      <label style="font-size:10px;color:#888;display:block;margin-bottom:4px;">🏅 Account Level (jahaz/cup/vip)</label>
+      <label style="font-size:10px;color:#888;display:block;margin-bottom:4px;">🏅 Account Badge</label>
       <div style="display:flex;gap:5px;margin-bottom:10px;">
-        <button id="_lvl_std" style="flex:1;padding:6px 4px;border-radius:6px;font-size:11px;cursor:pointer;border:2px solid #444;background:transparent;color:#fff;pointer-events:auto;">✈️ Standard</button>
-        <button id="_lvl_pro" style="flex:1;padding:6px 4px;border-radius:6px;font-size:11px;cursor:pointer;border:2px solid #444;background:transparent;color:#fff;pointer-events:auto;">🏆 Pro</button>
-        <button id="_lvl_vip" style="flex:1;padding:6px 4px;border-radius:6px;font-size:11px;cursor:pointer;border:2px solid #444;background:transparent;color:#fff;pointer-events:auto;">👑 VIP</button>
+        <button id="_lvl_auto" style="flex:1;padding:6px 4px;border-radius:6px;font-size:11px;cursor:pointer;border:2px solid #444;background:transparent;color:#fff;pointer-events:auto;">⚡ Auto</button>
+        <button id="_lvl_std"  style="flex:1;padding:6px 4px;border-radius:6px;font-size:11px;cursor:pointer;border:2px solid #444;background:transparent;color:#fff;pointer-events:auto;">✈️ Plane</button>
+        <button id="_lvl_pro"  style="flex:1;padding:6px 4px;border-radius:6px;font-size:11px;cursor:pointer;border:2px solid #444;background:transparent;color:#fff;pointer-events:auto;">🏆 Cup</button>
+        <button id="_lvl_vip"  style="flex:1;padding:6px 4px;border-radius:6px;font-size:11px;cursor:pointer;border:2px solid #444;background:transparent;color:#fff;pointer-events:auto;">💎 Diamond</button>
       </div>
 
       <!-- P/L Mode -->
@@ -633,31 +627,30 @@ function openSettingsPopup() {
   btnAuto.onclick   = () => setMode('auto');
   btnManual.onclick = () => setMode('manual');
 
-  // ── Level buttons ──
+  // ── Level / Badge buttons ──
   const KEY_LEVEL   = 'manual_level';
-  let selectedLevel = localStorage.getItem(KEY_LEVEL) || 'standart';
+  let selectedLevel = localStorage.getItem(KEY_LEVEL) || 'auto';
 
-  const lvlStd = document.getElementById('_lvl_std');
-  const lvlPro = document.getElementById('_lvl_pro');
-  const lvlVip = document.getElementById('_lvl_vip');
+  const lvlAuto = document.getElementById('_lvl_auto');
+  const lvlStd  = document.getElementById('_lvl_std');
+  const lvlPro  = document.getElementById('_lvl_pro');
+  const lvlVip  = document.getElementById('_lvl_vip');
 
   function setLevel(l) {
     selectedLevel = l;
-    [lvlStd, lvlPro, lvlVip].forEach(b => {
-      b.style.background  = 'transparent';
-      b.style.borderColor = '#444';
+    [lvlAuto, lvlStd, lvlPro, lvlVip].forEach(b => {
+      if (b) { b.style.background = 'transparent'; b.style.borderColor = '#444'; }
     });
-    const active = l === 'standart' ? lvlStd : l === 'pro' ? lvlPro : lvlVip;
-    active.style.background  = '#0faf59';
-    active.style.borderColor = '#0faf59';
+    const active = l === 'auto' ? lvlAuto : l === 'standart' ? lvlStd : l === 'pro' ? lvlPro : lvlVip;
+    if (active) { active.style.background = '#0faf59'; active.style.borderColor = '#0faf59'; }
   }
 
-  // Saved value apply karo
   setLevel(selectedLevel);
 
-  lvlStd.addEventListener('click', (e) => { e.stopPropagation(); setLevel('standart'); });
-  lvlPro.addEventListener('click', (e) => { e.stopPropagation(); setLevel('pro'); });
-  lvlVip.addEventListener('click', (e) => { e.stopPropagation(); setLevel('vip'); });
+  lvlAuto.addEventListener('click', e => { e.stopPropagation(); setLevel('auto'); });
+  lvlStd.addEventListener('click',  e => { e.stopPropagation(); setLevel('standart'); });
+  lvlPro.addEventListener('click',  e => { e.stopPropagation(); setLevel('pro'); });
+  lvlVip.addEventListener('click',  e => { e.stopPropagation(); setLevel('vip'); });
 
   let lossMode  = isLoss;
   const pnlInp  = document.getElementById('_inp_pnl');
@@ -716,13 +709,17 @@ function openSettingsPopup() {
     savedProgress = progPct; localStorage.setItem(KEY_PROGRESS, progPct);
     pnlMode = mode; localStorage.setItem(KEY_PNL_MODE, mode);
 
-    // Level save + icon foran apply karo
-    localStorage.setItem('manual_level', selectedLevel);
-    const iconHref = `/profile/images/spritemap.svg#icon-profile-level-${selectedLevel}`;
-    document.querySelectorAll('.h5aTJ svg use, .ePf8T svg use, .lmj_k svg use').forEach(icon => {
-      icon.setAttribute('xlink:href', iconHref);
-      icon.setAttribute('href', iconHref);
-    });
+    // Level save + icon apply
+    if (selectedLevel === 'auto') {
+      localStorage.removeItem('manual_level');
+    } else {
+      localStorage.setItem('manual_level', selectedLevel);
+      const lvlHref = `/profile/images/spritemap.svg#icon-profile-level-${selectedLevel}`;
+      document.querySelectorAll('.h5aTJ svg use, .ePf8T svg use, .lmj_k svg use').forEach(icon => {
+        icon.setAttribute('xlink:href', lvlHref);
+        icon.setAttribute('href', lvlHref);
+      });
+    }
 
     if (mode === 'manual') {
       const absVal = Math.abs(Number(pnlInp.value) || 0);
