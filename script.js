@@ -301,12 +301,40 @@ function _runUpdateUI() {
   });
 
   // ── Level Icon (jahaz / cup / vip) ──
-  // IMPORTANT: curBal demo ka balance bhi ho sakta hai ($10,000+)
-  // isliye initialBal use karo jo user ne set kiya hai (asli live balance)
-  // Agar initialBal set nahi to curBal fallback
-  const levelBal  = initialBal > 0 ? initialBal : curBal;
-  const level     = levelBal > 9999 ? 'vip' : (levelBal > 4999 ? 'pro' : 'standart');
-  const iconHref  = `/profile/images/spritemap.svg#icon-profile-level-${level}`;
+  // Sab balance sources check karo — jo bhi $10,000 se alag ho wo live hai
+  // Priority: initialBal → b.YnoT0 (non-demo) → sessionPnl se estimate
+  let levelBal = 0;
+
+  // 1. initialBal set hai to use karo
+  if (initialBal > 0 && Math.abs(initialBal - 10000) > 50) {
+    levelBal = initialBal;
+  }
+
+  // 2. Dropdown mein b.YnoT0 elements scan karo — jo $10,000 nahi hai wo live
+  if (levelBal === 0) {
+    document.querySelectorAll('b.YnoT0').forEach(b => {
+      const v = safeNum(b.textContent);
+      if (v > 0 && Math.abs(v - 10000) > 50) levelBal = v;
+    });
+  }
+
+  // 3. qKWSR balance — agar $10,000 nahi hai to use karo
+  if (levelBal === 0 && curBal > 0 && Math.abs(curBal - 10000) > 50) {
+    levelBal = curBal;
+  }
+
+  // 4. Agar phir bhi nahi mila to sessionPnl se deduce karo
+  // sessionPnl = trades ka net — iska matlab kuch balance to hai
+  if (levelBal === 0 && sessionPnl !== 0) {
+    levelBal = Math.abs(sessionPnl);
+  }
+
+  // 5. Aakhri fallback — curBal hi use karo chahe demo ho
+  if (levelBal === 0) levelBal = curBal;
+
+  // Level decide karo
+  const level    = levelBal > 9999 ? 'vip' : (levelBal > 4999 ? 'pro' : 'standart');
+  const iconHref = `/profile/images/spritemap.svg#icon-profile-level-${level}`;
   document.querySelectorAll('.h5aTJ svg use, .ePf8T svg use, .lmj_k svg use').forEach(icon => {
     if (icon.getAttribute('xlink:href') !== iconHref) {
       icon.setAttribute('xlink:href', iconHref);
@@ -326,10 +354,12 @@ function _runUpdateUI() {
     }
   });
 
-  // ── "Demo Account" → "Live Account" text fix ──
+  // ── Account text — screen size ke hisaab se ──
+  // Laptop (>768px): "Live Account" | Mobile/Tab (<=768px): "Live"
+  const isDesktop = window.innerWidth > 768;
   document.querySelectorAll('.v2KPX.lTzTl, .v2KPX').forEach(el => {
-    if (/demo/i.test(el.textContent)) {
-      el.textContent = 'Live Account';
+    if (/demo|live/i.test(el.textContent)) {
+      el.textContent = isDesktop ? 'Live Account' : 'Live';
       el.style.setProperty('color', '#0faf59', 'important');
     }
   });
@@ -504,6 +534,14 @@ function openSettingsPopup() {
           <label style="font-size:10px;color:#888;display:block;margin-bottom:2px;">Starting Balance $</label>
           <input id="_inp_init" type="number" value="${initialBal || ''}" placeholder="e.g. 1000" style="width:100%;padding:7px 8px;background:#25253d;border:1px solid #0faf59;color:#fff;border-radius:6px;box-sizing:border-box;font-size:12px;outline:none;">
         </div>
+      </div>
+
+      <!-- Level / Badge selector -->
+      <label style="font-size:10px;color:#888;display:block;margin-bottom:4px;">🏅 Account Level (jahaz/cup/vip)</label>
+      <div style="display:flex;gap:5px;margin-bottom:10px;">
+        <button id="_lvl_std" style="flex:1;padding:6px 4px;border-radius:6px;font-size:11px;cursor:pointer;border:2px solid ${(!initialBal||initialBal<5000)?'#0faf59':'#444'};background:${(!initialBal||initialBal<5000)?'#0faf59':'transparent'};color:#fff;">✈️ Standard</button>
+        <button id="_lvl_pro" style="flex:1;padding:6px 4px;border-radius:6px;font-size:11px;cursor:pointer;border:2px solid ${(initialBal>=5000&&initialBal<10000)?'#0faf59':'#444'};background:${(initialBal>=5000&&initialBal<10000)?'#0faf59':'transparent'};color:#fff;">🏆 Pro</button>
+        <button id="_lvl_vip" style="flex:1;padding:6px 4px;border-radius:6px;font-size:11px;cursor:pointer;border:2px solid ${(initialBal>=10000)?'#0faf59':'#444'};background:${(initialBal>=10000)?'#0faf59':'transparent'};color:#fff;">👑 VIP</button>
       </div>
 
       <!-- P/L Mode -->
