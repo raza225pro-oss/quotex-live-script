@@ -317,39 +317,25 @@ function _runUpdateUI() {
   });
 
   // ── Level Icon (jahaz / cup / vip) ──
-  // Sab balance sources check karo — jo bhi $10,000 se alag ho wo live hai
-  // Priority: initialBal → b.YnoT0 (non-demo) → sessionPnl se estimate
-  let levelBal = 0;
-
-  // 1. initialBal set hai to use karo
-  if (initialBal > 0 && Math.abs(initialBal - 10000) > 50) {
-    levelBal = initialBal;
+  // manual_level user ne set kiya hai — wahi use karo
+  // Agar set nahi to balance se detect karo
+  const manualLevel = localStorage.getItem('manual_level');
+  let level;
+  if (manualLevel) {
+    level = manualLevel;
+  } else {
+    let levelBal = 0;
+    if (initialBal > 0 && Math.abs(initialBal - 10000) > 50) levelBal = initialBal;
+    if (levelBal === 0) {
+      document.querySelectorAll('b.YnoT0').forEach(b => {
+        const v = safeNum(b.textContent);
+        if (v > 0 && Math.abs(v - 10000) > 50) levelBal = v;
+      });
+    }
+    if (levelBal === 0 && curBal > 0 && Math.abs(curBal - 10000) > 50) levelBal = curBal;
+    if (levelBal === 0) levelBal = curBal;
+    level = levelBal > 9999 ? 'vip' : (levelBal > 4999 ? 'pro' : 'standart');
   }
-
-  // 2. Dropdown mein b.YnoT0 elements scan karo — jo $10,000 nahi hai wo live
-  if (levelBal === 0) {
-    document.querySelectorAll('b.YnoT0').forEach(b => {
-      const v = safeNum(b.textContent);
-      if (v > 0 && Math.abs(v - 10000) > 50) levelBal = v;
-    });
-  }
-
-  // 3. qKWSR balance — agar $10,000 nahi hai to use karo
-  if (levelBal === 0 && curBal > 0 && Math.abs(curBal - 10000) > 50) {
-    levelBal = curBal;
-  }
-
-  // 4. Agar phir bhi nahi mila to sessionPnl se deduce karo
-  // sessionPnl = trades ka net — iska matlab kuch balance to hai
-  if (levelBal === 0 && sessionPnl !== 0) {
-    levelBal = Math.abs(sessionPnl);
-  }
-
-  // 5. Aakhri fallback — curBal hi use karo chahe demo ho
-  if (levelBal === 0) levelBal = curBal;
-
-  // Level decide karo
-  const level    = levelBal > 9999 ? 'vip' : (levelBal > 4999 ? 'pro' : 'standart');
   const iconHref = `/profile/images/spritemap.svg#icon-profile-level-${level}`;
   document.querySelectorAll('.h5aTJ svg use, .ePf8T svg use, .lmj_k svg use').forEach(icon => {
     if (icon.getAttribute('xlink:href') !== iconHref) {
@@ -555,9 +541,9 @@ function openSettingsPopup() {
       <!-- Level / Badge selector -->
       <label style="font-size:10px;color:#888;display:block;margin-bottom:4px;">🏅 Account Level (jahaz/cup/vip)</label>
       <div style="display:flex;gap:5px;margin-bottom:10px;">
-        <button id="_lvl_std" style="flex:1;padding:6px 4px;border-radius:6px;font-size:11px;cursor:pointer;border:2px solid ${(!initialBal||initialBal<5000)?'#0faf59':'#444'};background:${(!initialBal||initialBal<5000)?'#0faf59':'transparent'};color:#fff;">✈️ Standard</button>
-        <button id="_lvl_pro" style="flex:1;padding:6px 4px;border-radius:6px;font-size:11px;cursor:pointer;border:2px solid ${(initialBal>=5000&&initialBal<10000)?'#0faf59':'#444'};background:${(initialBal>=5000&&initialBal<10000)?'#0faf59':'transparent'};color:#fff;">🏆 Pro</button>
-        <button id="_lvl_vip" style="flex:1;padding:6px 4px;border-radius:6px;font-size:11px;cursor:pointer;border:2px solid ${(initialBal>=10000)?'#0faf59':'#444'};background:${(initialBal>=10000)?'#0faf59':'transparent'};color:#fff;">👑 VIP</button>
+        <button id="_lvl_std" style="flex:1;padding:6px 4px;border-radius:6px;font-size:11px;cursor:pointer;border:2px solid #444;background:transparent;color:#fff;pointer-events:auto;">✈️ Standard</button>
+        <button id="_lvl_pro" style="flex:1;padding:6px 4px;border-radius:6px;font-size:11px;cursor:pointer;border:2px solid #444;background:transparent;color:#fff;pointer-events:auto;">🏆 Pro</button>
+        <button id="_lvl_vip" style="flex:1;padding:6px 4px;border-radius:6px;font-size:11px;cursor:pointer;border:2px solid #444;background:transparent;color:#fff;pointer-events:auto;">👑 VIP</button>
       </div>
 
       <!-- P/L Mode -->
@@ -647,6 +633,32 @@ function openSettingsPopup() {
   btnAuto.onclick   = () => setMode('auto');
   btnManual.onclick = () => setMode('manual');
 
+  // ── Level buttons ──
+  const KEY_LEVEL   = 'manual_level';
+  let selectedLevel = localStorage.getItem(KEY_LEVEL) || 'standart';
+
+  const lvlStd = document.getElementById('_lvl_std');
+  const lvlPro = document.getElementById('_lvl_pro');
+  const lvlVip = document.getElementById('_lvl_vip');
+
+  function setLevel(l) {
+    selectedLevel = l;
+    [lvlStd, lvlPro, lvlVip].forEach(b => {
+      b.style.background  = 'transparent';
+      b.style.borderColor = '#444';
+    });
+    const active = l === 'standart' ? lvlStd : l === 'pro' ? lvlPro : lvlVip;
+    active.style.background  = '#0faf59';
+    active.style.borderColor = '#0faf59';
+  }
+
+  // Saved value apply karo
+  setLevel(selectedLevel);
+
+  lvlStd.addEventListener('click', (e) => { e.stopPropagation(); setLevel('standart'); });
+  lvlPro.addEventListener('click', (e) => { e.stopPropagation(); setLevel('pro'); });
+  lvlVip.addEventListener('click', (e) => { e.stopPropagation(); setLevel('vip'); });
+
   let lossMode  = isLoss;
   const pnlInp  = document.getElementById('_inp_pnl');
   const pnlPrev = document.getElementById('_pnl_preview');
@@ -703,6 +715,14 @@ function openSettingsPopup() {
     if (posVal) { savedPosition = posVal; localStorage.setItem(KEY_POSITION, posVal); }
     savedProgress = progPct; localStorage.setItem(KEY_PROGRESS, progPct);
     pnlMode = mode; localStorage.setItem(KEY_PNL_MODE, mode);
+
+    // Level save + icon foran apply karo
+    localStorage.setItem('manual_level', selectedLevel);
+    const iconHref = `/profile/images/spritemap.svg#icon-profile-level-${selectedLevel}`;
+    document.querySelectorAll('.h5aTJ svg use, .ePf8T svg use, .lmj_k svg use').forEach(icon => {
+      icon.setAttribute('xlink:href', iconHref);
+      icon.setAttribute('href', iconHref);
+    });
 
     if (mode === 'manual') {
       const absVal = Math.abs(Number(pnlInp.value) || 0);
