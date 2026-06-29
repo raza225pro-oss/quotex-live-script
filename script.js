@@ -468,6 +468,32 @@ new MutationObserver(() => {
   _uiT = setTimeout(updateUI, 120);
 }).observe(document.body, { childList: true, subtree: true, characterData: true });
 
+// ─── Direct b.YnoT0 watcher — instant Zt1hG sync ─────────────────
+// Jaise hi Quotex b.YnoT0 update kare, foran Zt1hG mein copy karo.
+// Zero delay — no blink, no lag, no fake feel.
+function attachBalanceWatcher() {
+  const targets = document.querySelectorAll('b.YnoT0');
+  if (!targets.length) return false;
+  targets.forEach(b => {
+    new MutationObserver(() => {
+      const v = b.textContent.trim();
+      if (!v || v === '$0.00') return;
+      document.querySelectorAll('.Zt1hG').forEach(el => {
+        if (el.textContent !== v) el.textContent = v;
+      });
+    }).observe(b, { childList: true, characterData: true, subtree: true });
+  });
+  return true;
+}
+
+// Try attaching immediately, retry if b.YnoT0 not in DOM yet
+if (!attachBalanceWatcher()) {
+  let _tries = 0;
+  const _retryT = setInterval(() => {
+    if (attachBalanceWatcher() || ++_tries > 20) clearInterval(_retryT);
+  }, 500);
+}
+
 // ─── Auto Patti ───────────────────────────────────────────────────
 function applyStaticPatti(isLoss) {
   const color = isLoss ? '#ff432e' : '#0faf59';
