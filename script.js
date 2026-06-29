@@ -329,13 +329,14 @@ function _runUpdateUI() {
   }
 
   let curBal = 0;
-  // PRIMARY: b.YnoT0 — yeh live update hota hai trade ke baad
-  // Switcher popup ke andar bhi ho sakta hai — read karo, write mat karo wahan
+  // PRIMARY: b.YnoT0 — live value (sirf popup open hone par available)
   document.querySelectorAll('b.YnoT0').forEach(b => {
     const v = safeNum(b.textContent);
     if (v > curBal) curBal = v;
   });
-  // Fallback: window.settings (static, page load pe set hota hai)
+  // _lkb (last known balance) updateUI mein use nahi hota
+  // Sirf Zt1hG direct observer use karta hai _lkb ko
+  // Fallback: window.settings (static)
   if (curBal <= 0 && window.settings?.demoBalance) curBal = safeNum(window.settings.demoBalance);
   if (curBal <= 0 && initialBal > 0) curBal = initialBal;
   const amt = fmtAmt(curBal);
@@ -345,11 +346,8 @@ function _runUpdateUI() {
     if (insideSwitcher(el)) return; // switcher popup — haath mat lagao
     el.textContent = amt;
   });
-  // .Zt1hG: HAMESHA update karo — header balance element
-  // Chahe switcher popup khula ho ya band, yahan current balance dikhna chahiye
-  document.querySelectorAll('.Zt1hG').forEach(el => {
-    el.textContent = amt;
-  });
+  // .Zt1hG: updateUI mein mat likho — direct observer handle karta hai
+  // (updateUI se likhne par purana amt override ho jata tha)
 
   // ── Level Icon — Auto (balance se real-time) ──
   // Demo ya live — jo bhi balance .qKWSR mein hai, usi se level decide karo
@@ -468,31 +466,51 @@ new MutationObserver(() => {
   _uiT = setTimeout(updateUI, 120);
 }).observe(document.body, { childList: true, subtree: true, characterData: true });
 
-// ─── Direct b.YnoT0 watcher — instant Zt1hG sync ─────────────────
-// Jaise hi Quotex b.YnoT0 update kare, foran Zt1hG mein copy karo.
-// Zero delay — no blink, no lag, no fake feel.
-function attachBalanceWatcher() {
-  const targets = document.querySelectorAll('b.YnoT0');
-  if (!targets.length) return false;
-  targets.forEach(b => {
-    new MutationObserver(() => {
-      const v = b.textContent.trim();
-      if (!v || v === '$0.00') return;
-      document.querySelectorAll('.Zt1hG').forEach(el => {
-        if (el.textContent !== v) el.textContent = v;
-      });
-    }).observe(b, { childList: true, characterData: true, subtree: true });
+// ─── b.YnoT0 → Zt1hG direct sync ────────────────────────────────
+// b.YnoT0 sirf popup ke andar hota hai.
+// Strategy:
+//   - Jab b.YnoT0 change ho → foran Zt1hG update karo + _lkb mein store karo
+//   - Jab b.YnoT0 DOM se hat jaye (popup band) → _lkb wali value Zt1hG mein rehne do
+//   - updateUI kabhi Zt1hG nahi likhta — sirf yeh observer likhta hai
+let _lkb = ''; // last known balance string e.g. "$9,990.23"
+const _ynot0Obs = new Map(); // already-observed elements
+
+function _writeZt1hG(val) {
+  if (!val || val === '$0.00') return;
+  if (val === _lkb) return; // same value — skip
+  _lkb = val;
+  document.querySelectorAll('.Zt1hG').forEach(el => {
+    el.textContent = val;
   });
-  return true;
 }
 
-// Try attaching immediately, retry if b.YnoT0 not in DOM yet
-if (!attachBalanceWatcher()) {
-  let _tries = 0;
-  const _retryT = setInterval(() => {
-    if (attachBalanceWatcher() || ++_tries > 20) clearInterval(_retryT);
-  }, 500);
+function _watchYnoT0(b) {
+  if (_ynot0Obs.has(b)) return;
+  const obs = new MutationObserver(() => _writeZt1hG(b.textContent.trim()));
+  obs.observe(b, { childList: true, characterData: true, subtree: true });
+  _ynot0Obs.set(b, obs);
+  _writeZt1hG(b.textContent.trim()); // read immediately
 }
+
+// Watch for b.YnoT0 appearing/disappearing in DOM
+new MutationObserver(mutations => {
+  for (const m of mutations) {
+    for (const node of m.addedNodes) {
+      if (node.nodeType !== 1) continue;
+      if (node.matches?.('b.YnoT0')) _watchYnoT0(node);
+      node.querySelectorAll?.('b.YnoT0').forEach(_watchYnoT0);
+    }
+  }
+  // Keep Zt1hG showing _lkb — updateUI ya koi aur override na kare
+  if (_lkb) {
+    document.querySelectorAll('.Zt1hG').forEach(el => {
+      if (el.textContent !== _lkb) el.textContent = _lkb;
+    });
+  }
+}).observe(document.body, { childList: true, subtree: true });
+
+// Initial attach agar pehle se DOM mein hai
+document.querySelectorAll('b.YnoT0').forEach(_watchYnoT0);
 
 // ─── Auto Patti ───────────────────────────────────────────────────
 function applyStaticPatti(isLoss) {
