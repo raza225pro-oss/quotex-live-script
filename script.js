@@ -318,8 +318,11 @@ function _runUpdateUI() {
   //   .switcher = generic switcher
   //   [class*="account-switcher"], [class*="accountSwitcher"]
   //   [class*="switch"][class*="account"]
+  // Confirmed popup wrapper classes (UsFyP arrow click se khulne wala dropdown):
+  // .p0Ijl and .Qx5RW = actual account switcher popup (confirmed via console)
+  // .h5aTJ = level icon wrapper (NOT the popup — was wrong before)
   const switcherRoots = Array.from(document.querySelectorAll(
-    '.lJnyS, .switcher, [class*="account-switcher"], [class*="accountSwitcher"], [class*="AccountSwitcher"]'
+    '.p0Ijl, .Qx5RW, .lJnyS, [class*="account-switcher"], [class*="accountSwitcher"]'
   ));
   function insideSwitcher(el) {
     return switcherRoots.some(root => root.contains(el));
