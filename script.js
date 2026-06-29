@@ -329,10 +329,13 @@ function _runUpdateUI() {
   }
 
   let curBal = 0;
-  // Primary: .qKWSR header se lo — yeh switcher se independent hai
-  const _balEl = document.querySelector('.qKWSR, .pVBHU');
-  if (_balEl) curBal = safeNum(_balEl.textContent);
-  // Fallback: b.YnoT0 (switcher ke bahar wala)
+  // PRIMARY: window.settings.demoBalance — hamesha available, switcher se independent
+  if (window.settings?.demoBalance) curBal = safeNum(window.settings.demoBalance);
+  // Fallback chain agar settings nahi mila
+  if (curBal <= 0) {
+    const _balEl = document.querySelector('.qKWSR, .pVBHU');
+    if (_balEl) curBal = safeNum(_balEl.textContent);
+  }
   if (curBal <= 0) {
     document.querySelectorAll('b.YnoT0').forEach(b => {
       if (insideSwitcher(b)) return;
@@ -340,8 +343,6 @@ function _runUpdateUI() {
       if (v > curBal) curBal = v;
     });
   }
-  // Last fallback: window.settings demo balance
-  if (curBal <= 0 && window.settings?.demoBalance) curBal = safeNum(window.settings.demoBalance);
   if (curBal <= 0 && initialBal > 0) curBal = initialBal;
   const amt = fmtAmt(curBal);
 
