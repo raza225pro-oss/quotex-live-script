@@ -134,13 +134,10 @@ function onTradeResult(notifEl) {
   const lossEl   = notifEl.querySelector('.GIbOO.G4OWz');
 
   if (profitEl) {
+    _pollBalanceAfterTrade(); // foran polling shuru karo
     // WIN — text mein amount hai e.g. "+282.67 $"
     const amount = safeNum(profitEl.textContent);
     if (amount > 0) {
-      // Profit = payout - investment
-      // Payout jo mila wo balance mein aayega
-      // Hum net gain track karte hain: balance se dekhenge
-      // Lekin yahan simple approach: balance change track karo profit ke liye bhi
       _lastBalance = getBalance();  // snapshot lo
       // Thodi der baad balance check karo — net gain milega
       setTimeout(() => {
@@ -157,8 +154,8 @@ function onTradeResult(notifEl) {
       }, 1200);  // 1.2 sec baad balance settle ho jata hai
     }
   } else if (lossEl) {
+    _pollBalanceAfterTrade(); // foran polling shuru karo
     // LOSS — "0.00 $" — payout zero, trade amount gaya
-    // Balance change se accurate loss calculate karo
     _lastBalance = getBalance();
     _pendingLossCalc = true;
     // 1.5 sec baad balance check karega interval
@@ -477,11 +474,35 @@ const _ynot0Obs = new Map(); // already-observed elements
 
 function _writeZt1hG(val) {
   if (!val || val === '$0.00') return;
-  if (val === _lkb) return; // same value — skip
+  if (val === _lkb) return;
   _lkb = val;
   document.querySelectorAll('.Zt1hG').forEach(el => {
     el.textContent = val;
   });
+}
+
+// Trade complete hone par b.YnoT0 ka wait karo — popup band bhi ho to
+// short polling se value capture karo
+function _pollBalanceAfterTrade() {
+  let attempts = 0;
+  const t = setInterval(() => {
+    const b = document.querySelector('b.YnoT0');
+    if (b) {
+      const val = b.textContent.trim();
+      if (val && val !== '$0.00') {
+        _writeZt1hG(val);
+        _watchYnoT0(b);
+      }
+    }
+    // Agar koi active b.YnoT0 nahi to Quotex ka hidden API try karo
+    if (window.settings?.demoBalance) {
+      const v = '$' + Number(window.settings.demoBalance).toLocaleString(
+        undefined, {minimumFractionDigits:2, maximumFractionDigits:2});
+      // Sirf likhna agar _lkb se alag ho — matlab real update aaya
+      // (settings bhi lag hota hai but better than nothing)
+    }
+    if (++attempts >= 15) clearInterval(t); // 3 sec baad band
+  }, 200);
 }
 
 function _watchYnoT0(b) {
