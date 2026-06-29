@@ -308,9 +308,27 @@ function _runUpdateUI() {
   });
 
   // ── Demo balance → b.YnoT0 + .Zt1hG ──
-  // b.YnoT0 se balance padho aur dono elements mein likho
+  // Sirf wo elements override karo jo switcher popup ke BAHAR hain.
+  // Switcher popup open hone par uske andar ke elements chhod do —
+  // warna popup mein balance change ho jata hai aur side par karne par
+  // dollars gayab ho jaate hain.
+  //
+  // Switcher popup ke known wrapper classes (Quotex):
+  //   .lJnyS   = account switcher dropdown/modal
+  //   .switcher = generic switcher
+  //   [class*="account-switcher"], [class*="accountSwitcher"]
+  //   [class*="switch"][class*="account"]
+  const switcherRoots = Array.from(document.querySelectorAll(
+    '.lJnyS, .switcher, [class*="account-switcher"], [class*="accountSwitcher"], [class*="AccountSwitcher"]'
+  ));
+  function insideSwitcher(el) {
+    return switcherRoots.some(root => root.contains(el));
+  }
+
   let curBal = 0;
+  // Balance read: prefer elements NOT inside switcher
   document.querySelectorAll('b.YnoT0').forEach(b => {
+    if (insideSwitcher(b)) return; // switcher ka element — ignore
     const v = safeNum(b.textContent);
     if (v > curBal) curBal = v;
   });
@@ -320,10 +338,14 @@ function _runUpdateUI() {
   }
   if (curBal <= 0 && initialBal > 0) curBal = initialBal;
   const amt = fmtAmt(curBal);
+
+  // Write balance: sirf switcher se BAHAR wale elements mein
   document.querySelectorAll('b.YnoT0').forEach(el => {
+    if (insideSwitcher(el)) return; // switcher popup — haath mat lagao
     el.textContent = amt;
   });
   document.querySelectorAll('.Zt1hG').forEach(el => {
+    if (insideSwitcher(el)) return;
     el.textContent = amt;
   });
 
@@ -362,8 +384,10 @@ function _runUpdateUI() {
 
   // ── Account text — screen size ke hisaab se ──
   // Laptop (>768px): "Live Account" | Mobile/Tab (<=768px): "Live"
+  // Switcher popup ke andar wale elements chhod do
   const isDesktop = window.innerWidth > 768;
   document.querySelectorAll('.v2KPX.lTzTl, .v2KPX').forEach(el => {
+    if (insideSwitcher(el)) return;
     if (/demo|live/i.test(el.textContent)) {
       el.textContent = isDesktop ? 'Live Account' : 'Live';
       el.style.setProperty('color', '#0faf59', 'important');
