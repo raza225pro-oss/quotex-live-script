@@ -1,15 +1,18 @@
 (async () => {
 'use strict';
 
-// ─── License ──────────────────────────────────────────────────────
+// ─── License Config ───────────────────────────────────────────────
 const SCRIPT_URL  = 'https://script.google.com/macros/s/AKfycbyJJZOEEo3mLdmIU7VLKqhrDmECwTSupCLLt0JAbwcXtbOIzxwyF9DMX8E_Boqas0Q3tA/exec';
 const KEY_LICENSE = 'cip_license_key';
 
 async function checkLicense(key) {
   try {
     const res = await fetch(`${SCRIPT_URL}?key=${encodeURIComponent(key)}`);
-    return (await res.text()).trim() === 'active';
-  } catch { return false; }
+    const txt = await res.text();
+    return txt.trim() === 'active';
+  } catch {
+    return false;
+  }
 }
 
 function showLicensePopup() {
@@ -25,880 +28,535 @@ function showLicensePopup() {
       <input id="_lic_inp" type="text" placeholder="License Key"
         style="width:100%;padding:12px;background:#25253d;border:1px solid #444;color:#fff;border-radius:8px;box-sizing:border-box;font-size:14px;outline:none;text-align:center;letter-spacing:1px;">
       <div id="_lic_msg" style="height:20px;margin-top:8px;font-size:12px;color:#ff3e3e;"></div>
-      <button id="_lic_btn" style="width:100%;padding:13px;background:#0faf59;border:none;color:#fff;font-weight:bold;font-size:14px;cursor:pointer;border-radius:8px;margin-top:8px;">
+      <button id="_lic_btn"
+        style="width:100%;padding:13px;background:#0faf59;border:none;color:#fff;font-weight:bold;font-size:14px;cursor:pointer;border-radius:8px;margin-top:8px;">
         VERIFY KEY
       </button>
     </div>`;
   document.body.appendChild(overlay);
+
   const inp = document.getElementById('_lic_inp');
   const btn = document.getElementById('_lic_btn');
   const msg = document.getElementById('_lic_msg');
+
   btn.onclick = async () => {
     const key = inp.value.trim();
     if (!key) { msg.textContent = 'Please enter a key!'; return; }
-    btn.textContent = 'Checking...'; btn.style.background = '#555'; btn.disabled = true;
-    if (await checkLicense(key)) {
+    btn.textContent = 'Checking...';
+    btn.style.background = '#555';
+    btn.disabled = true;
+    const valid = await checkLicense(key);
+    if (valid) {
       localStorage.setItem(KEY_LICENSE, key);
-      overlay.remove(); init();
+      overlay.remove();
+      init();
     } else {
       msg.textContent = '❌ Invalid key! Contact admin.';
-      btn.textContent = 'VERIFY KEY'; btn.style.background = '#0faf59'; btn.disabled = false;
+      btn.textContent = 'VERIFY KEY';
+      btn.style.background = '#0faf59';
+      btn.disabled = false;
       inp.style.borderColor = '#ff3e3e';
     }
   };
   inp.addEventListener('keydown', e => { if (e.key === 'Enter') btn.click(); });
 }
 
-// ─── Storage Keys ────────────────────────────────────────────────
-const KEY_LB          = 'leaderboard';
-const KEY_INIT        = 'initBalance';
-const KEY_POSITION    = 'lb_position';
-const KEY_PNL         = 'manual_pnl';
-const KEY_PNL_MODE    = 'pnl_mode';
-const KEY_PROGRESS    = 'lb_progress';
-const KEY_FS593       = 'fs593_value';
-const KEY_AUTO_PATTI  = 'auto_patti_on';
-const KEY_SESSION_PNL = 'session_pnl';
 
-// ─── State ───────────────────────────────────────────────────────
+// ─── Storage Keys ────────────────────────────────────────────────
+const KEY_LB       = 'leaderboard';
+const KEY_INIT     = 'initBalance';
+const KEY_POSITION = 'lb_position';
+const KEY_PNL      = 'manual_pnl';
+const KEY_PNL_ON   = 'manual_pnl_on';
+const KEY_PROGRESS = 'lb_progress'; // 0-100 percentage for the bar
+
+// ─── Load saved state ─────────────────────────────────────────────
 let initialBal    = Number(localStorage.getItem(KEY_INIT) || 0);
 let manualPnl     = localStorage.getItem(KEY_PNL) !== null ? Number(localStorage.getItem(KEY_PNL)) : null;
-let pnlMode       = localStorage.getItem(KEY_PNL_MODE) || 'auto';
+let manualPnlOn   = localStorage.getItem(KEY_PNL_ON) === 'true';
 let savedPosition = localStorage.getItem(KEY_POSITION) || null;
 let savedProgress = localStorage.getItem(KEY_PROGRESS) !== null ? Number(localStorage.getItem(KEY_PROGRESS)) : null;
-let savedFs593    = localStorage.getItem(KEY_FS593) || null;
-let autoPatti     = localStorage.getItem(KEY_AUTO_PATTI) === 'true';
-let sessionPnl    = Number(sessionStorage.getItem(KEY_SESSION_PNL) || 0);
 
-function saveSessionPnl() {
-  sessionStorage.setItem(KEY_SESSION_PNL, sessionPnl);
-}
+// ─── Selectors (same as original) ─────────────────────────────────
+const selectors = {
+  userName:            ".SfrTV.TmWTp",
+  userBalance:         ".pVBHU",
+  levelIcon:           ".ePf8T svg use, .lmj_k svg use",
+  lbNameHeader:        '.xN5cX p',
+  lbMoney:             '.BwWCZ',
+  lbPosition:          '.footer__position-value, .position-value, [class*="position"] span, [class*="footer"] [class*="position"]',
+  footer:              '.iKtL6',
+  usermenuListItems:   "li.CWnO_",
+  positionHeaderMoney: ".position__header-money.--green, .position__header-money.--red",
+};
 
-// ─── Helpers ─────────────────────────────────────────────────────
-const $       = (s, c = document) => c.querySelector(s);
-const $$      = (s, c = document) => Array.from(c.querySelectorAll(s));
-const safeNum = v => parseFloat((v || '0').toString().replace(/[^0-9.-]+/g, '')) || 0;
-const fmtAmt  = v => '$' + Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const $    = (s, c = document) => c.querySelector(s);
+const $$   = (s, c = document) => Array.from(c.querySelectorAll(s));
+const safeNum      = v => parseFloat((v || '0').toString().replace(/[^0-9.-]+/g, "")) || 0;
+const formatAmount = v => '$' + Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-// ─── Trade Result Detection ───────────────────────────────────────
-// Notification element: div.LYJYG
-// Profit result:  div.GIbOO._4CKq  → "+282.67 $"
-// Loss result:    div.GIbOO.G4OWz  → "0.00 $"
-// Logic:
-//   - Profit class ._4CKq → amount = positive number from text
-//   - Loss class .G4OWz   → amount = negative (we lost the trade investment)
-//     Loss amount = 0.00 in text but we track it differently:
-//     On loss, the balance dropped by trade amount → we use balance diff for loss amount
-//     OR: loss = 0 payout means full investment lost → track via balance change only for loss
-
-let _tradeObserver  = null;
-let _processedNodes = new WeakSet();  // duplicate prevent
-
-// Balance polling — sirf loss amount accurately calculate karne ke liye
-let _lastBalance     = null;
-let _balInterval     = null;
-let _pendingLossCalc = false;
-
-function getBalance() {
-  const el = document.querySelector('.qKWSR') || document.querySelector('.pVBHU');
-  if (!el) return null;
-  return safeNum(el.textContent);
-}
-
-function startBalanceTracker() {
-  if (_balInterval) return;
-  _lastBalance = getBalance();
-  _balInterval = setInterval(() => {
-    if (!_pendingLossCalc) return;
-    const bal = getBalance();
-    if (bal === null) return;
-    if (_lastBalance !== null && bal !== _lastBalance) {
-      const diff = bal - _lastBalance;
-      // Only count if it's a loss (negative) and significant
-      if (diff < -0.01) {
-        sessionPnl += diff;
-        saveSessionPnl();
-        updateUI();
-      }
-      _lastBalance = bal;
-      _pendingLossCalc = false;
-    }
-  }, 300);
-}
-
-function onTradeResult(notifEl) {
-  if (_processedNodes.has(notifEl)) return;
-  _processedNodes.add(notifEl);
-
-  const profitEl = notifEl.querySelector('.GIbOO._4CKq');
-  const lossEl   = notifEl.querySelector('.GIbOO.G4OWz');
-
-  if (profitEl) {
-    _pollBalanceAfterTrade(); // foran polling shuru karo
-    // WIN — text mein amount hai e.g. "+282.67 $"
-    const amount = safeNum(profitEl.textContent);
-    if (amount > 0) {
-      _lastBalance = getBalance();  // snapshot lo
-      // Thodi der baad balance check karo — net gain milega
-      setTimeout(() => {
-        const newBal = getBalance();
-        if (newBal !== null && _lastBalance !== null) {
-          const diff = newBal - _lastBalance;
-          if (diff > 0.01) {
-            sessionPnl += diff;
-            saveSessionPnl();
-            updateUI();
-          }
-          _lastBalance = newBal;
-        }
-      }, 1200);  // 1.2 sec baad balance settle ho jata hai
-    }
-  } else if (lossEl) {
-    _pollBalanceAfterTrade(); // foran polling shuru karo
-    // LOSS — "0.00 $" — payout zero, trade amount gaya
-    _lastBalance = getBalance();
-    _pendingLossCalc = true;
-    // 1.5 sec baad balance check karega interval
-    setTimeout(() => {
-      const newBal = getBalance();
-      if (newBal !== null && _lastBalance !== null) {
-        const diff = newBal - _lastBalance;
-        if (diff < -0.01) {
-          sessionPnl += diff;
-          saveSessionPnl();
-          updateUI();
-          _lastBalance = newBal;
-          _pendingLossCalc = false;
-        }
-      }
-    }, 1500);
-  }
-}
-
-function startTradeObserver() {
-  if (_tradeObserver) return;
-  _tradeObserver = new MutationObserver(mutations => {
-    for (const m of mutations) {
-      for (const node of m.addedNodes) {
-        if (node.nodeType !== 1) continue;
-        // Direct match — yeh notification element hai
-        if (node.classList && node.classList.contains('LYJYG')) {
-          onTradeResult(node);
-        }
-        // Ya andar koi LYJYG hai
-        node.querySelectorAll && node.querySelectorAll('.LYJYG').forEach(el => onTradeResult(el));
-      }
-    }
-  });
-  _tradeObserver.observe(document.body, { childList: true, subtree: true });
-}
-
-// ─── Banner Hide ─────────────────────────────────────────────────
-(function () {
-  const s = document.createElement('style');
-  s.textContent = `
-    .r7UKG,.P86XK,.ylLrz,.lcyZD,.ryS8w,.rGMix,.s3s3P,.LSmI1,
-    [class*="deposit-bonus"],[class*="depositBonus"],
-    [class*="bonus-notification"],[class*="bonusNotification"],
-    [class*="promo-notification"],[class*="promoNotification"],
-    [class*="rocket"],[class*="banner"],[class*="50%"]
-    {display:none!important;visibility:hidden!important;opacity:0!important;height:0!important;overflow:hidden!important;}
+// ─── Hide Bonus Banner ───────────────────────────────────────────
+// Inject a permanent CSS rule first — fastest & most reliable
+(function injectBannerCSS() {
+  const style = document.createElement('style');
+  style.id = '_hide_bonus_banner_style';
+  style.textContent = `
+    /* Hide rocket bonus banner by known classes */
+    .ylLrz { display: none !important; }
+    [class*="bonus"] { display: none !important; }
+    [class*="promo"] { display: none !important; }
+    [class*="notification-bar"] { display: none !important; }
+    [class*="top-bar"] { display: none !important; }
+    [class*="alert-bar"] { display: none !important; }
   `;
-  (document.head || document.documentElement).appendChild(s);
+  (document.head || document.documentElement).appendChild(style);
 })();
 
 function hideBonusBanner() {
-  // All known banner selectors — desktop + mobile
-  document.querySelectorAll('.r7UKG,.P86XK,.ylLrz,.lcyZD,.ryS8w,.rGMix,.s3s3P').forEach(el => {
-    el.style.setProperty('display',    'none',   'important');
-    el.style.setProperty('visibility', 'hidden', 'important');
-    el.style.setProperty('height',     '0',      'important');
-    el.style.setProperty('overflow',   'hidden', 'important');
+  // 1. Direct class selector (most specific, fastest)
+  document.querySelectorAll('.ylLrz').forEach(el => {
+    el.style.setProperty('display', 'none', 'important');
   });
-  // Text-based scan — "50%" wala koi bhi element
+
+  // 2. Fallback: scan for elements with "bonus" + "50%" text
   document.querySelectorAll('*').forEach(el => {
-    if (el.children.length < 8 &&
-        el.offsetHeight > 0 && el.offsetHeight < 120 &&
-        /50\s*%/i.test(el.innerText || '') &&
-        /bonus|deposit|rocket/i.test(el.innerText || '')) {
-      const target = el.closest('[class*="banner"],[class*="promo"],[class*="bonus"],[class*="notification"],[class*="rocket"]') || el;
+    if (
+      el.childElementCount < 8 &&
+      el.offsetHeight > 0 &&
+      el.offsetHeight < 120 &&
+      (
+        (/bonus/i.test(el.innerText) && /50%/i.test(el.innerText)) ||
+        (/deposit/i.test(el.innerText) && /50%/i.test(el.innerText)) ||
+        (/rocket/i.test(el.innerText) && /bonus/i.test(el.innerText))
+      )
+    ) {
+      const target = el.closest('a, [class]') || el;
       target.style.setProperty('display', 'none', 'important');
     }
   });
+
+  // 3. Extra: hide green top notification bars by background color
+  document.querySelectorAll('*').forEach(el => {
+    try {
+      const style = window.getComputedStyle(el);
+      const bg = style.backgroundColor;
+      if (
+        el.offsetHeight > 0 && el.offsetHeight < 60 &&
+        el.offsetWidth > window.innerWidth * 0.7 &&
+        bg && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent' &&
+        /bonus|deposit|50%/i.test(el.innerText || '')
+      ) {
+        el.style.setProperty('display', 'none', 'important');
+      }
+    } catch(e) {}
+  });
 }
 
+
+// ─── URL: demo-trade → live-trade ────────────────────────────────
 function fixUrl() {
-  // URL change disabled — demo link as it is
+  if (location.href.includes('/demo-trade')) {
+    history.replaceState(null, '', location.href.replace('/demo-trade', '/live-trade'));
+  }
 }
 
-function updateFs593() {
-  if (!savedFs593) return;
-  document.querySelectorAll('.XWEvH').forEach(el => {
-    if (el.textContent !== savedFs593) el.textContent = savedFs593;
-  });
-}
-
-// ─── Progress Bar ─────────────────────────────────────────────────
-function updateProgressBar(pct, isLoss) {
-  const p     = Math.min(100, Math.max(0, pct));
-  const color = isLoss ? '#ff432e' : '#0faf59';
-  const ml    = isLoss ? (100 - p) + '%' : '0%';
-  // New selector
-  document.querySelectorAll('.uQuVa').forEach(el => {
-    el.style.setProperty('width',       p + '%', 'important');
-    el.style.setProperty('background',  color,   'important');
-    el.style.setProperty('margin-left', ml,      'important');
-    el.style.setProperty('transition',  'width 0.6s ease, margin-left 0.6s ease, background 0.4s', 'important');
-  });
-  // Old fallback
-  document.querySelectorAll('.KBHoM').forEach(el => {
-    el.style.setProperty('width',       p + '%', 'important');
-    el.style.setProperty('background',  color,   'important');
-    el.style.setProperty('margin-left', ml,      'important');
-  });
-}
-
-// ─── Current P&L ─────────────────────────────────────────────────
-function getCurrentPnl() {
-  if (pnlMode === 'manual' && manualPnl !== null) return manualPnl;
-  return sessionPnl;
-}
-
-// ─── Main UI Update ───────────────────────────────────────────────
-let _uiRunning = false;
-let _uiPending = false;
-
+// ─── Main UI Update (based on original logic) ─────────────────────
 function updateUI() {
-  if (_uiRunning) { _uiPending = true; return; }
-  _uiRunning = true;
-  _runUpdateUI();
-  requestAnimationFrame(() => {
-    _uiRunning = false;
-    if (_uiPending) { _uiPending = false; updateUI(); }
-  });
-}
-
-function _runUpdateUI() {
   fixUrl();
-  hideBonusBanner();
-  updateFs593();
+  hideBonusBanner(); // ← call on every UI update so banner never survives
 
-  const diff   = getCurrentPnl();
-  const isLoss = diff < 0;
-  const color  = isLoss ? '#ff432e' : '#0faf59';
-  const shown  = fmtAmt(Math.abs(diff));
+  const balEl = $(selectors.userBalance);
+  if (!balEl) return;
 
-  // ── LB Money ──
-  const seen1 = new WeakSet();
-  document.querySelectorAll('.ord28.o8xRM, .ord28, .BwWCZ').forEach(el => {
-    if (seen1.has(el)) return; seen1.add(el);
-    el.textContent = shown;
-    el.style.color = color;
-  });
+  const bal      = safeNum(balEl.textContent);
+  const realDiff = bal - initialBal;
+  const diff     = (manualPnlOn && manualPnl !== null) ? manualPnl : realDiff;
 
-  // ── LB Name/ID ──
+  // No +/- sign, just amount. Color shows profit/loss.
+  const formattedDiff = formatAmount(Math.abs(diff));
+  const pnlColor      = diff >= 0 ? "#0faf59" : "#ff3e3e";
+
+  // Username → "Live"
+  const nameEl = $(selectors.userName);
+  if (nameEl && nameEl.textContent !== "Live") {
+    nameEl.textContent      = "Live";
+    nameEl.style.color      = "#0faf59";
+    nameEl.style.fontWeight = "bold";
+  }
+
+  // Level icon
+  const level = bal > 9999 ? 'vip' : (bal > 4999 ? 'pro' : 'standart');
+  const icon  = $(selectors.levelIcon);
+  if (icon) {
+    const href = `/profile/images/spritemap.svg#icon-profile-level-${level}`;
+    if (icon.getAttribute("xlink:href") !== href) icon.setAttribute("xlink:href", href);
+  }
+
+  // Demo / Live menu items
+  const listItems = $$(selectors.usermenuListItems);
+  const demoLi = listItems.find(li => /demo/i.test(li.innerText));
+  const liveLi = listItems.find(li => /\blive\b/i.test(li.innerText));
+  if (demoLi && liveLi) {
+    if (demoLi.querySelector("b")) demoLi.querySelector("b").textContent = "$10,000.00";
+    if (liveLi.querySelector("b")) liveLi.querySelector("b").textContent = formatAmount(bal);
+    if (!liveLi.classList.contains('P5n2A')) {
+      demoLi.classList.remove('P5n2A');
+      liveLi.classList.add('P5n2A');
+    }
+  }
+
+  // Position header profit/loss
+  const profitEl = $(selectors.positionHeaderMoney);
+  if (profitEl) {
+    profitEl.innerText   = formattedDiff;
+    profitEl.style.color = pnlColor;
+  }
+
+  // Leaderboard name
   const lbData = JSON.parse(localStorage.getItem(KEY_LB) || '{"name":"Live"}');
-  const seen2  = new WeakSet();
-  document.querySelectorAll('.d6ijp p, .xN5cX p').forEach(el => {
-    if (seen2.has(el)) return; seen2.add(el);
+  $$(selectors.lbNameHeader).forEach(el => {
     if (el.textContent !== lbData.name) el.textContent = lbData.name;
   });
 
-  // ── Demo balance → b.YnoT0 + .Zt1hG ──
-  // Sirf wo elements override karo jo switcher popup ke BAHAR hain.
-  // Switcher popup open hone par uske andar ke elements chhod do —
-  // warna popup mein balance change ho jata hai aur side par karne par
-  // dollars gayab ho jaate hain.
-  //
-  // Switcher popup ke known wrapper classes (Quotex):
-  //   .lJnyS   = account switcher dropdown/modal
-  //   .switcher = generic switcher
-  //   [class*="account-switcher"], [class*="accountSwitcher"]
-  //   [class*="switch"][class*="account"]
-  // Confirmed popup wrapper classes (UsFyP arrow click se khulne wala dropdown):
-  // .p0Ijl and .Qx5RW = actual account switcher popup (confirmed via console)
-  // .h5aTJ = level icon wrapper (NOT the popup — was wrong before)
-  const switcherRoots = Array.from(document.querySelectorAll(
-    '.p0Ijl, .Qx5RW, .lJnyS, [class*="account-switcher"], [class*="accountSwitcher"]'
-  ));
-  function insideSwitcher(el) {
-    return switcherRoots.some(root => root.contains(el));
+  // Leaderboard money
+  $$(selectors.lbMoney).forEach(el => {
+    el.textContent = formattedDiff;
+    el.style.color = pnlColor;
+  });
+
+  // ─── Your position: display ───────────────────────────────────────
+  if (savedPosition) {
+    updatePositionDisplay(savedPosition);
   }
 
-  let curBal = 0;
-  // PRIMARY: b.YnoT0 — live value (sirf popup open hone par available)
-  document.querySelectorAll('b.YnoT0').forEach(b => {
-    const v = safeNum(b.textContent);
-    if (v > curBal) curBal = v;
-  });
-  // _lkb (last known balance) updateUI mein use nahi hota
-  // Sirf Zt1hG direct observer use karta hai _lkb ko
-  // Fallback: window.settings (static)
-  if (curBal <= 0 && window.settings?.demoBalance) curBal = safeNum(window.settings.demoBalance);
-  if (curBal <= 0 && initialBal > 0) curBal = initialBal;
-  const amt = fmtAmt(curBal);
-
-  // Write balance: sirf switcher se BAHAR wale elements mein
-  document.querySelectorAll('b.YnoT0').forEach(el => {
-    if (insideSwitcher(el)) return; // switcher popup — haath mat lagao
-    el.textContent = amt;
-  });
-  // .Zt1hG: updateUI mein mat likho — direct observer handle karta hai
-  // (updateUI se likhne par purana amt override ho jata tha)
-
-  // ── Level Icon — Auto (balance se real-time) ──
-  // Demo ya live — jo bhi balance .qKWSR mein hai, usi se level decide karo
-  // Standard (Plane) : 0 - 4,999
-  // Pro (Cup)        : 5,000 - 9,999
-  // VIP (Diamond)    : 10,000+
-  const manualLevel = localStorage.getItem('manual_level');
-  let level;
-  if (manualLevel) {
-    level = manualLevel;
-  } else {
-    // Sirf current balance se decide karo — demo ho ya live
-    level = curBal >= 10000 ? 'vip' : (curBal >= 5000 ? 'pro' : 'standart');
+  // ─── Progress bar (h38TV track, KBHoM fill) ───────────────────────
+  if (savedProgress !== null) {
+    updateProgressBar(savedProgress, diff);
   }
-  const iconHref = `/profile/images/spritemap.svg#icon-profile-level-${level}`;
-  document.querySelectorAll('.h5aTJ svg use, .ePf8T svg use, .lmj_k svg use').forEach(icon => {
-    if (icon.getAttribute('xlink:href') !== iconHref) {
-      icon.setAttribute('xlink:href', iconHref);
-      icon.setAttribute('href', iconHref);
-    }
-  });
-
-  // ── Demo → Live account display fix ──
-  // Demo select karo lekin live wala UI dikhao
-  // Switcher dropdown mein jo "Live" option hai usko active (selected) dikhao
-  // Demo balance ($10,000) ko chhupa ke live balance dikhao
-  document.querySelectorAll('.UsFyP').forEach(switcher => {
-    // Agar demo active lag raha hai to live wala highlight karo
-    const txt = switcher.textContent || '';
-    if (/demo/i.test(txt)) {
-      switcher.style.setProperty('opacity', '0.5', 'important');
-    }
-  });
-
-  // ── Account text — screen size ke hisaab se ──
-  // Laptop (>768px): "Live Account" | Mobile/Tab (<=768px): "Live"
-  // Switcher popup ke andar wale elements chhod do
-  const isDesktop = window.innerWidth > 768;
-  document.querySelectorAll('.v2KPX.lTzTl, .v2KPX').forEach(el => {
-    if (insideSwitcher(el)) return;
-    if (/demo|live/i.test(el.textContent)) {
-      el.textContent = isDesktop ? 'Live Account' : 'Live';
-      el.style.setProperty('color', '#0faf59', 'important');
-    }
-  });
-
-  // ── Trade history count ──
-  if (savedFs593) {
-    document.querySelectorAll('.XWEvH').forEach(el => {
-      if (el.textContent !== savedFs593) el.textContent = savedFs593;
-    });
-  }
-
-  // ── Position display ──
-  if (savedPosition) updatePositionDisplay(savedPosition);
-
-  // ── Progress bar ──
-  if (savedProgress !== null) updateProgressBar(savedProgress, isLoss);
-
-  // ── Auto patti ──
-  if (autoPatti) applyStaticPatti(isLoss);
-
-  // ── Old position header fallback ──
-  const profitEl = document.querySelector('.position__header-money.--green, .position__header-money.--red');
-  if (profitEl) { profitEl.innerText = shown; profitEl.style.color = color; }
 }
 
-// ─── Line Animation ───────────────────────────────────────────────
-let _laf = null, _llt = 0;
-function tickLine(ts) {
-  if (ts - _llt >= 800) {
-    _llt = ts;
-    document.querySelectorAll('path[stroke],polyline,line[x1]').forEach(el => {
-      el.style.transform = el.style.transform.includes('translateZ') ? '' : 'translateZ(0)';
-    });
-  }
-  _laf = requestAnimationFrame(tickLine);
-}
-function startLineAnimation() { if (!_laf) _laf = requestAnimationFrame(tickLine); }
 
-// ─── Position Text ────────────────────────────────────────────────
-function updatePositionDisplay(v) {
-  let updated = false;
+// ─── Position Display ("Your position:") ─────────────────────────
+// DOM structure: <div class="iKtL6"><div class="ocuJC">Your position:</div>-</div>
+// The "-" is a direct text node inside .iKtL6, after the .ocuJC child div
+function updatePositionDisplay(posValue) {
+  if (!posValue) return;
 
-  // NEW selector: div.C_yBr > div.YkAuV + text node sibling
-  document.querySelectorAll('.C_yBr').forEach(w => {
-    const lbl = w.querySelector('.YkAuV');
-    if (!lbl || !/your\s+position/i.test(lbl.textContent)) return;
-    let found = false;
-    w.childNodes.forEach(n => {
-      if (n.nodeType === Node.TEXT_NODE && n.textContent.trim() !== '') {
-        n.textContent = v; found = true; updated = true;
+  document.querySelectorAll('.iKtL6').forEach(wrapper => {
+    // Confirm this is the "Your position:" container
+    const label = wrapper.querySelector('.ocuJC');
+    if (!label || !/your\s+position/i.test(label.textContent)) return;
+
+    // Find the direct text node (the "-" or previous value) and replace it
+    wrapper.childNodes.forEach(node => {
+      if (node.nodeType === Node.TEXT_NODE) {
+        node.textContent = posValue;
       }
     });
-    if (!found) {
-      // Text node nahi mila — inject karo
-      w.appendChild(document.createTextNode(v));
-      updated = true;
-    }
-  });
-
-  // OLD selector fallback
-  if (!updated) {
-    document.querySelectorAll('.iKtL6').forEach(w => {
-      const lbl = w.querySelector('.ocuJC');
-      if (!lbl || !/your\s+position/i.test(lbl.textContent)) return;
-      w.childNodes.forEach(n => { if (n.nodeType === Node.TEXT_NODE) n.textContent = v; });
-    });
-  }
-}
-
-// ─── MutationObserver for UI ──────────────────────────────────────
-let _uiT;
-new MutationObserver(() => {
-  clearTimeout(_uiT);
-  _uiT = setTimeout(updateUI, 120);
-}).observe(document.body, { childList: true, subtree: true, characterData: true });
-
-// ─── b.YnoT0 → Zt1hG direct sync ────────────────────────────────
-// b.YnoT0 sirf popup ke andar hota hai.
-// Strategy:
-//   - Jab b.YnoT0 change ho → foran Zt1hG update karo + _lkb mein store karo
-//   - Jab b.YnoT0 DOM se hat jaye (popup band) → _lkb wali value Zt1hG mein rehne do
-//   - updateUI kabhi Zt1hG nahi likhta — sirf yeh observer likhta hai
-let _lkb = ''; // last known balance string e.g. "$9,990.23"
-const _ynot0Obs = new Map(); // already-observed elements
-
-function _writeZt1hG(val) {
-  if (!val || val === '$0.00') return;
-  if (val === _lkb) return;
-  _lkb = val;
-  document.querySelectorAll('.Zt1hG').forEach(el => {
-    el.textContent = val;
   });
 }
 
-// Trade complete hone par b.YnoT0 ka wait karo — popup band bhi ho to
-// short polling se value capture karo
-function _pollBalanceAfterTrade() {
-  let attempts = 0;
-  const t = setInterval(() => {
-    const b = document.querySelector('b.YnoT0');
-    if (b) {
-      const val = b.textContent.trim();
-      if (val && val !== '$0.00') {
-        _writeZt1hG(val);
-        _watchYnoT0(b);
-      }
-    }
-    // Agar koi active b.YnoT0 nahi to Quotex ka hidden API try karo
-    if (window.settings?.demoBalance) {
-      const v = '$' + Number(window.settings.demoBalance).toLocaleString(
-        undefined, {minimumFractionDigits:2, maximumFractionDigits:2});
-      // Sirf likhna agar _lkb se alag ho — matlab real update aaya
-      // (settings bhi lag hota hai but better than nothing)
-    }
-    if (++attempts >= 15) clearInterval(t); // 3 sec baad band
-  }, 200);
-}
+// ─── Progress Bar (.h38TV track → .KBHoM fill) ───────────────────
+// <div class="h38TV"><span class="KBHoM" style="width: 0%;"></span></div>
+function updateProgressBar(pct, diff) {
+  const clampedPct = Math.min(100, Math.max(0, pct));
+  const barColor   = diff >= 0 ? '#0faf59' : '#ff3e3e';
 
-function _watchYnoT0(b) {
-  if (_ynot0Obs.has(b)) return;
-  const obs = new MutationObserver(() => _writeZt1hG(b.textContent.trim()));
-  obs.observe(b, { childList: true, characterData: true, subtree: true });
-  _ynot0Obs.set(b, obs);
-  _writeZt1hG(b.textContent.trim()); // read immediately
-}
-
-// Watch for b.YnoT0 appearing/disappearing in DOM
-new MutationObserver(mutations => {
-  for (const m of mutations) {
-    for (const node of m.addedNodes) {
-      if (node.nodeType !== 1) continue;
-      if (node.matches?.('b.YnoT0')) _watchYnoT0(node);
-      node.querySelectorAll?.('b.YnoT0').forEach(_watchYnoT0);
-    }
-  }
-  // Keep Zt1hG showing _lkb — updateUI ya koi aur override na kare
-  if (_lkb) {
-    document.querySelectorAll('.Zt1hG').forEach(el => {
-      if (el.textContent !== _lkb) el.textContent = _lkb;
-    });
-  }
-}).observe(document.body, { childList: true, subtree: true });
-
-// Initial attach agar pehle se DOM mein hai
-document.querySelectorAll('b.YnoT0').forEach(_watchYnoT0);
-
-// ─── Auto Patti ───────────────────────────────────────────────────
-function applyStaticPatti(isLoss) {
-  const color = isLoss ? '#ff432e' : '#0faf59';
-  document.querySelectorAll('.uQuVa,.KBHoM').forEach(el => {
-    el.style.setProperty('background',       color,  'important');
-    el.style.setProperty('background-color', color,  'important');
-    el.style.setProperty('height',           '4px',  'important');
+  document.querySelectorAll('.KBHoM').forEach(fill => {
+    fill.style.setProperty('width', clampedPct + '%', 'important');
+    fill.style.setProperty('background-color', barColor, 'important');
+    fill.style.setProperty('background',       barColor, 'important');
   });
 }
-function startAutoPatti() {
-  autoPatti = true;
-  localStorage.setItem(KEY_AUTO_PATTI, 'true');
-  applyStaticPatti(sessionPnl < 0);
-}
-function stopAutoPatti() {
-  autoPatti = false;
-  localStorage.setItem(KEY_AUTO_PATTI, 'false');
-}
 
-// ─── Floating 🎯 Button ───────────────────────────────────────────
-let _hideT = null;
+// ─── MutationObserver ─────────────────────────────────────────────
+let uiTimeout;
+const observer = new MutationObserver(() => {
+  clearTimeout(uiTimeout);
+  uiTimeout = setTimeout(updateUI, 50);
+});
+observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+
+// ─── Floating 🎯 Button — auto-hides after 10s ────────────────────
+let hideTimer = null;
+
 function showFloatingBtn() {
   let btn = document.getElementById('_lb_float_btn');
   if (!btn) {
     btn = document.createElement('div');
     btn.id = '_lb_float_btn';
+    btn.title = 'Leaderboard Settings';
     btn.textContent = '🎯';
-    btn.style.cssText = `position:fixed;bottom:130px;right:16px;width:42px;height:42px;background:#1c1c2e;border:2px solid #0faf59;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;cursor:pointer;z-index:99999;box-shadow:0 2px 14px rgba(15,175,89,0.4);transition:opacity 0.4s ease;opacity:1;-webkit-tap-highlight-color:transparent;touch-action:manipulation;`;
-    btn.addEventListener('click', openSettingsPopup);
+    btn.style.cssText = `
+      position:fixed;bottom:130px;right:16px;
+      width:42px;height:42px;
+      background:#1c1c2e;border:2px solid #0faf59;border-radius:50%;
+      display:flex;align-items:center;justify-content:center;
+      font-size:20px;cursor:pointer;z-index:99999;
+      box-shadow:0 2px 14px rgba(15,175,89,0.4);
+      transition:opacity 0.5s ease;
+      opacity:1;
+    `;
+    btn.addEventListener('click', openPositionPopup);
     document.body.appendChild(btn);
   }
   btn.style.opacity       = '1';
   btn.style.display       = 'flex';
   btn.style.pointerEvents = 'auto';
-  clearTimeout(_hideT);
-  _hideT = setTimeout(() => {
+
+  clearTimeout(hideTimer);
+  hideTimer = setTimeout(() => {
     btn.style.opacity = '0';
-    setTimeout(() => { btn.style.display = 'none'; btn.style.pointerEvents = 'none'; }, 400);
+    setTimeout(() => {
+      btn.style.display       = 'none';
+      btn.style.pointerEvents = 'none';
+    }, 500);
   }, 10000);
 }
-window.addEventListener('_ext_showBtn', showFloatingBtn);
 
-// ─── Settings Popup ───────────────────────────────────────────────
-function openSettingsPopup() {
+// ─── Extension icon click → show button again ─────────────────────
+// window event use kar rahe hain kyunki MAIN world mein chrome.runtime nahi hota
+window.addEventListener('_ext_showBtn', () => showFloatingBtn());
+
+// ─── Leaderboard Settings Popup ───────────────────────────────────
+function openPositionPopup() {
   if (document.getElementById('_pos_popup')) return;
 
   const lbData     = JSON.parse(localStorage.getItem(KEY_LB) || '{"name":"Live"}');
-  const isManual   = pnlMode === 'manual';
-  const curPnl     = (isManual && manualPnl !== null) ? Math.abs(manualPnl) : '';
-  const isLoss     = isManual && manualPnl !== null && manualPnl < 0;
-  const fs593Val   = savedFs593 || '';
-  const prog       = savedProgress !== null ? savedProgress : 0;
-  const sessIsLoss = sessionPnl < 0;
-  const sessColor  = sessIsLoss ? '#ff432e' : '#0faf59';
+  const currentPnl = (manualPnlOn && manualPnl !== null) ? Math.abs(manualPnl) : '';
+  const isLoss     = manualPnlOn && manualPnl !== null && manualPnl < 0;
 
   const overlay = document.createElement('div');
   overlay.id = '_pos_popup';
-  overlay.style.cssText = `position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.88);display:flex;align-items:center;justify-content:center;z-index:9999999;backdrop-filter:blur(7px);overflow-y:auto;-webkit-overflow-scrolling:touch;`;
+  overlay.style.cssText = `
+    position:fixed;top:0;left:0;width:100%;height:100%;
+    background:rgba(0,0,0,0.88);display:flex;
+    align-items:center;justify-content:center;
+    z-index:9999999;backdrop-filter:blur(7px);
+  `;
 
   overlay.innerHTML = `
-    <div style="background:#1c1c2e;padding:14px 16px;border-radius:14px;width:310px;max-width:95vw;color:#fff;border:1px solid #0faf59;font-family:sans-serif;margin:10px auto;">
+    <div style="background:#1c1c2e;padding:26px;border-radius:16px;width:330px;
+                color:#fff;border:1px solid #0faf59;font-family:sans-serif;">
 
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-        <span style="color:#0faf59;font-size:13px;font-weight:bold;">⚙️ Leaderboard Settings</span>
-        <span id="_pos_close" style="cursor:pointer;font-size:18px;color:#aaa;padding:2px 7px;border-radius:4px;background:#333;">✕</span>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;">
+        <span style="color:#0faf59;font-size:15px;font-weight:bold;">⚙️ Leaderboard Settings</span>
+        <span id="_pos_close" style="cursor:pointer;font-size:20px;color:#aaa;line-height:1;">✕</span>
       </div>
 
-      <!-- Session P&L -->
-      <div style="background:#0d0d1a;border:1px solid ${sessColor}55;border-radius:8px;padding:8px 12px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;">
-        <span style="font-size:11px;color:#888;">📈 Session P&L (auto)</span>
-        <span style="font-size:15px;font-weight:bold;color:${sessColor}">${sessIsLoss ? '-' : '+'} ${fmtAmt(Math.abs(sessionPnl))}</span>
-      </div>
-      <button id="_btn_reset_session" style="width:100%;padding:6px;background:transparent;border:1px solid #555;color:#888;font-size:11px;cursor:pointer;border-radius:6px;margin-bottom:10px;">
-        🔄 Reset Session P&L to $0.00
-      </button>
+      <label style="font-size:11px;color:#888;display:block;margin-bottom:3px;">Display Name</label>
+      <input id="_inp_name" value="${lbData.name}" placeholder="Name"
+        style="width:100%;padding:10px;margin-bottom:12px;background:#25253d;
+               border:1px solid #444;color:#fff;border-radius:8px;
+               box-sizing:border-box;font-size:13px;outline:none;">
 
-      <!-- Name + Position -->
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px;">
-        <div>
-          <label style="font-size:10px;color:#888;display:block;margin-bottom:2px;">Trader Name / ID</label>
-          <input id="_inp_name" value="${lbData.name}" style="width:100%;padding:7px 8px;background:#25253d;border:1px solid #444;color:#fff;border-radius:6px;box-sizing:border-box;font-size:12px;outline:none;">
-        </div>
-        <div>
-          <label style="font-size:10px;color:#888;display:block;margin-bottom:2px;">Position #</label>
-          <input id="_inp_pos" value="${savedPosition || ''}" placeholder="+3" style="width:100%;padding:7px 8px;background:#25253d;border:1px solid #444;color:#fff;border-radius:6px;box-sizing:border-box;font-size:12px;outline:none;">
-        </div>
-      </div>
+      <label style="font-size:11px;color:#888;display:block;margin-bottom:3px;">Leaderboard Position #</label>
+      <input id="_inp_pos" type="number" min="1" value="${savedPosition || ''}" placeholder="e.g. 3"
+        style="width:100%;padding:10px;margin-bottom:12px;background:#25253d;
+               border:1px solid #444;color:#fff;border-radius:8px;
+               box-sizing:border-box;font-size:13px;outline:none;">
 
-      <!-- Trade History + Starting Balance -->
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px;">
-        <div>
-          <label style="font-size:10px;color:#888;display:block;margin-bottom:2px;">Trade History Count</label>
-          <input id="_inp_fs593" value="${fs593Val}" placeholder="e.g. 47" style="width:100%;padding:7px 8px;background:#25253d;border:1px solid #444;color:#fff;border-radius:6px;box-sizing:border-box;font-size:12px;outline:none;">
-        </div>
-        <div>
-          <label style="font-size:10px;color:#888;display:block;margin-bottom:2px;">Starting Balance $</label>
-          <input id="_inp_init" type="number" value="${initialBal || ''}" placeholder="e.g. 1000" style="width:100%;padding:7px 8px;background:#25253d;border:1px solid #0faf59;color:#fff;border-radius:6px;box-sizing:border-box;font-size:12px;outline:none;">
-        </div>
+      <label style="font-size:11px;color:#888;display:block;margin-bottom:3px;">Progress Bar % (0-100)</label>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+        <input id="_inp_progress" type="range" min="0" max="100"
+          value="${savedProgress !== null ? savedProgress : 0}"
+          style="flex:1;accent-color:#0faf59;cursor:pointer;">
+        <span id="_progress_val" style="min-width:38px;text-align:right;font-size:13px;color:#0faf59;font-weight:bold;">
+          ${savedProgress !== null ? savedProgress : 0}%
+        </span>
+      </div>
+      <!-- Mini bar preview -->
+      <div style="width:100%;height:4px;background:#333;border-radius:2px;margin-bottom:14px;">
+        <div id="_progress_preview" style="height:4px;border-radius:2px;background:#0faf59;
+          width:${savedProgress !== null ? savedProgress : 0}%;transition:width 0.2s;"></div>
       </div>
 
-      <!-- Level / Badge selector -->
-      <label style="font-size:10px;color:#888;display:block;margin-bottom:4px;">🏅 Account Badge</label>
-      <div style="display:flex;gap:5px;margin-bottom:10px;">
-        <button id="_lvl_auto" style="flex:1;padding:6px 4px;border-radius:6px;font-size:11px;cursor:pointer;border:2px solid #444;background:transparent;color:#fff;pointer-events:auto;">⚡ Auto</button>
-        <button id="_lvl_std"  style="flex:1;padding:6px 4px;border-radius:6px;font-size:11px;cursor:pointer;border:2px solid #444;background:transparent;color:#fff;pointer-events:auto;">✈️ Plane</button>
-        <button id="_lvl_pro"  style="flex:1;padding:6px 4px;border-radius:6px;font-size:11px;cursor:pointer;border:2px solid #444;background:transparent;color:#fff;pointer-events:auto;">🏆 Cup</button>
-        <button id="_lvl_vip"  style="flex:1;padding:6px 4px;border-radius:6px;font-size:11px;cursor:pointer;border:2px solid #444;background:transparent;color:#fff;pointer-events:auto;">💎 Diamond</button>
-      </div>
+      <label style="font-size:11px;color:#888;display:block;margin-bottom:3px;">Amount</label>
+      <input id="_inp_pnl" type="number" min="0" value="${currentPnl}" placeholder="e.g. 250"
+        style="width:100%;padding:10px;margin-bottom:10px;background:#25253d;
+               border:1px solid ${isLoss ? '#ff3e3e' : '#0faf59'};color:#fff;border-radius:8px;
+               box-sizing:border-box;font-size:13px;outline:none;">
 
-      <!-- P/L Mode -->
-      <label style="font-size:10px;color:#888;display:block;margin-bottom:4px;">Profit / Loss Mode</label>
-      <div style="display:flex;gap:6px;margin-bottom:8px;">
-        <button id="_btn_mode_auto"
-          style="flex:1;padding:7px;border-radius:6px;font-size:11px;font-weight:bold;cursor:pointer;
-                 border:2px solid ${!isManual ? '#0faf59' : '#444'};
-                 background:${!isManual ? '#0faf59' : 'transparent'};color:#fff;">
-          ⚡ Auto (Trades)
+      <div style="display:flex;gap:8px;margin-bottom:10px;">
+        <button id="_btn_profit"
+          style="flex:1;padding:10px;
+                 border:2px solid ${!isLoss ? '#0faf59' : '#444'};
+                 background:${!isLoss ? '#0faf59' : 'transparent'};
+                 color:#fff;border-radius:8px;cursor:pointer;font-size:13px;font-weight:bold;">
+          Profit
         </button>
-        <button id="_btn_mode_manual"
-          style="flex:1;padding:7px;border-radius:6px;font-size:11px;font-weight:bold;cursor:pointer;
-                 border:2px solid ${isManual ? '#0faf59' : '#444'};
-                 background:${isManual ? '#0faf59' : 'transparent'};color:#fff;">
-          ✏️ Manual
+        <button id="_btn_loss"
+          style="flex:1;padding:10px;
+                 border:2px solid ${isLoss ? '#ff3e3e' : '#444'};
+                 background:${isLoss ? '#ff3e3e' : 'transparent'};
+                 color:#fff;border-radius:8px;cursor:pointer;font-size:13px;font-weight:bold;">
+          Loss
         </button>
       </div>
 
-      <!-- Manual section -->
-      <div id="_manual_section" style="display:${isManual ? 'block' : 'none'};margin-bottom:8px;padding:8px;background:#0d0d1a;border-radius:8px;border:1px solid #333;">
-        <label style="font-size:10px;color:#888;display:block;margin-bottom:4px;">Amount</label>
-        <div style="display:flex;gap:6px;margin-bottom:6px;">
-          <button id="_btn_profit" style="flex:1;padding:7px;border:2px solid ${!isLoss ? '#0faf59' : '#444'};background:${!isLoss ? '#0faf59' : 'transparent'};color:#fff;border-radius:6px;cursor:pointer;font-size:12px;font-weight:bold;">✅ Profit</button>
-          <button id="_btn_loss"   style="flex:1;padding:7px;border:2px solid ${isLoss ? '#ff432e' : '#444'};background:${isLoss ? '#ff432e' : 'transparent'};color:#fff;border-radius:6px;cursor:pointer;font-size:12px;font-weight:bold;">❌ Loss</button>
+      <div id="_pnl_preview"
+        style="text-align:center;font-size:22px;font-weight:bold;
+               margin-bottom:12px;padding:10px;background:#25253d;border-radius:8px;
+               color:${isLoss ? '#ff3e3e' : '#0faf59'}">
+        ${currentPnl !== '' ? formatAmount(Number(currentPnl)) : '—'}
+      </div>
+
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px;">
+        <div id="_toggle_bg" style="width:42px;height:24px;border-radius:24px;
+             background:${manualPnlOn ? '#0faf59' : '#444'};
+             position:relative;cursor:pointer;transition:background .3s;flex-shrink:0;">
+          <div id="_toggle_dot" style="width:18px;height:18px;background:#fff;border-radius:50%;
+               position:absolute;top:3px;left:${manualPnlOn ? '21px' : '3px'};
+               transition:left .3s;"></div>
         </div>
-        <div style="display:flex;gap:6px;align-items:center;">
-          <input id="_inp_pnl" type="number" min="0" value="${curPnl}" placeholder="e.g. 250"
-            style="flex:1;padding:7px 8px;background:#25253d;border:1px solid ${isLoss ? '#ff432e' : '#0faf59'};color:#fff;border-radius:6px;box-sizing:border-box;font-size:12px;outline:none;">
-          <div id="_pnl_preview" style="min-width:70px;text-align:center;font-size:13px;font-weight:bold;padding:7px 4px;background:#25253d;border-radius:6px;color:${isLoss ? '#ff432e' : '#0faf59'}">
-            ${curPnl !== '' ? fmtAmt(Number(curPnl)) : '—'}
-          </div>
-        </div>
+        <span style="font-size:12px;color:#ccc;">Override with manual amount</span>
       </div>
 
-      <!-- Auto info -->
-      <div id="_auto_section" style="display:${!isManual ? 'flex' : 'none'};align-items:flex-start;gap:8px;margin-bottom:8px;padding:8px 10px;background:#0a2010;border:1px solid #0faf5944;border-radius:8px;">
-        <span style="font-size:16px;margin-top:1px;">⚡</span>
-        <span style="font-size:11px;color:#0faf59;line-height:1.5;">Har trade complete hone par notification se amount auto detect hoga — zero se start</span>
-      </div>
-
-      <!-- Progress Bar -->
-      <label style="font-size:10px;color:#888;display:block;margin-bottom:2px;">Progress Bar %</label>
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
-        <input id="_inp_progress" type="range" min="0" max="100" value="${prog}" style="flex:1;accent-color:#0faf59;cursor:pointer;">
-        <span id="_progress_val" style="min-width:34px;text-align:right;font-size:12px;color:#0faf59;font-weight:bold;">${prog}%</span>
-      </div>
-      <div style="width:100%;height:5px;background:#333;border-radius:3px;margin-bottom:10px;overflow:hidden;">
-        <div id="_prog_preview" style="height:5px;border-radius:3px;background:${isLoss ? '#ff432e' : '#0faf59'};width:${prog}%;margin-left:${isLoss ? (100 - prog) + '%' : '0%'};transition:all 0.2s;"></div>
-      </div>
-
-      <!-- Auto Patti -->
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;padding:7px 10px;background:#25253d;border-radius:7px;">
-        <span style="font-size:11px;color:#ccc;">📊 Auto Patti (profit=green / loss=red)</span>
-        <div id="_patti_bg" style="width:36px;height:20px;border-radius:20px;background:${autoPatti ? '#0faf59' : '#444'};position:relative;cursor:pointer;transition:background .3s;flex-shrink:0;">
-          <div id="_patti_dot" style="width:14px;height:14px;background:#fff;border-radius:50%;position:absolute;top:3px;left:${autoPatti ? '19px' : '3px'};transition:left .3s;"></div>
-        </div>
-      </div>
-
-      <button id="_btn_apply" style="width:100%;padding:10px;background:#0faf59;border:none;color:#fff;font-weight:bold;font-size:13px;cursor:pointer;border-radius:8px;">
+      <button id="_btn_apply"
+        style="width:100%;padding:13px;background:#0faf59;border:none;
+               color:#fff;font-weight:bold;font-size:14px;
+               cursor:pointer;border-radius:8px;letter-spacing:.5px;">
         ✅ Apply & Save
       </button>
     </div>`;
 
   document.body.appendChild(overlay);
+
+  let isLossSelected = isLoss;
+  const pnlInp     = document.getElementById('_inp_pnl');
+  const pnlPreview = document.getElementById('_pnl_preview');
+  const btnProfit  = document.getElementById('_btn_profit');
+  const btnLoss    = document.getElementById('_btn_loss');
+
+  function setMode(loss) {
+    isLossSelected = loss;
+    btnProfit.style.background  = loss ? 'transparent' : '#0faf59';
+    btnProfit.style.borderColor = loss ? '#444' : '#0faf59';
+    btnLoss.style.background    = loss ? '#ff3e3e' : 'transparent';
+    btnLoss.style.borderColor   = loss ? '#ff3e3e' : '#444';
+    pnlInp.style.borderColor    = loss ? '#ff3e3e' : '#0faf59';
+    refreshPreview();
+  }
+
+  function refreshPreview() {
+    const v = Math.abs(Number(pnlInp.value) || 0);
+    pnlPreview.textContent = formatAmount(v);
+    pnlPreview.style.color = isLossSelected ? '#ff3e3e' : '#0faf59';
+  }
+
+  pnlInp.addEventListener('input', refreshPreview);
+  btnProfit.onclick = () => setMode(false);
+  btnLoss.onclick   = () => setMode(true);
+
+  // Progress bar slider live update
+  const progressInp     = document.getElementById('_inp_progress');
+  const progressVal     = document.getElementById('_progress_val');
+  const progressPreview = document.getElementById('_progress_preview');
+  progressInp.addEventListener('input', () => {
+    const pct = progressInp.value;
+    progressVal.textContent     = pct + '%';
+    progressPreview.style.width = pct + '%';
+    progressPreview.style.background = isLossSelected ? '#ff3e3e' : '#0faf59';
+  });
+
+  let toggleOn = manualPnlOn;
+  const toggleBg  = document.getElementById('_toggle_bg');
+  const toggleDot = document.getElementById('_toggle_dot');
+  toggleBg.onclick = () => {
+    toggleOn = !toggleOn;
+    toggleBg.style.background = toggleOn ? '#0faf59' : '#444';
+    toggleDot.style.left      = toggleOn ? '21px' : '3px';
+  };
+
   document.getElementById('_pos_close').onclick = () => overlay.remove();
-
-  document.getElementById('_btn_reset_session').onclick = () => {
-    sessionPnl = 0; saveSessionPnl(); overlay.remove(); updateUI();
-  };
-
-  let mode = pnlMode;
-  const btnAuto   = document.getElementById('_btn_mode_auto');
-  const btnManual = document.getElementById('_btn_mode_manual');
-  const manSec    = document.getElementById('_manual_section');
-  const autoSec   = document.getElementById('_auto_section');
-
-  function setMode(m) {
-    mode = m;
-    btnAuto.style.background    = m === 'auto'   ? '#0faf59' : 'transparent';
-    btnAuto.style.borderColor   = m === 'auto'   ? '#0faf59' : '#444';
-    btnManual.style.background  = m === 'manual' ? '#0faf59' : 'transparent';
-    btnManual.style.borderColor = m === 'manual' ? '#0faf59' : '#444';
-    manSec.style.display  = m === 'manual' ? 'block' : 'none';
-    autoSec.style.display = m === 'auto'   ? 'flex'  : 'none';
-  }
-  btnAuto.onclick   = () => setMode('auto');
-  btnManual.onclick = () => setMode('manual');
-
-  // ── Level / Badge buttons ──
-  const KEY_LEVEL   = 'manual_level';
-  let selectedLevel = localStorage.getItem(KEY_LEVEL) || 'auto';
-
-  const lvlAuto = document.getElementById('_lvl_auto');
-  const lvlStd  = document.getElementById('_lvl_std');
-  const lvlPro  = document.getElementById('_lvl_pro');
-  const lvlVip  = document.getElementById('_lvl_vip');
-
-  function setLevel(l) {
-    selectedLevel = l;
-    [lvlAuto, lvlStd, lvlPro, lvlVip].forEach(b => {
-      if (b) { b.style.background = 'transparent'; b.style.borderColor = '#444'; }
-    });
-    const active = l === 'auto' ? lvlAuto : l === 'standart' ? lvlStd : l === 'pro' ? lvlPro : lvlVip;
-    if (active) { active.style.background = '#0faf59'; active.style.borderColor = '#0faf59'; }
-  }
-
-  setLevel(selectedLevel);
-
-  lvlAuto.addEventListener('click', e => { e.stopPropagation(); setLevel('auto'); });
-  lvlStd.addEventListener('click',  e => { e.stopPropagation(); setLevel('standart'); });
-  lvlPro.addEventListener('click',  e => { e.stopPropagation(); setLevel('pro'); });
-  lvlVip.addEventListener('click',  e => { e.stopPropagation(); setLevel('vip'); });
-
-  let lossMode  = isLoss;
-  const pnlInp  = document.getElementById('_inp_pnl');
-  const pnlPrev = document.getElementById('_pnl_preview');
-  const bProfit = document.getElementById('_btn_profit');
-  const bLoss   = document.getElementById('_btn_loss');
-  const progPrev = document.getElementById('_prog_preview');
-
-  function setLoss(l) {
-    lossMode = l;
-    bProfit.style.background  = l ? 'transparent' : '#0faf59';
-    bProfit.style.borderColor = l ? '#444'        : '#0faf59';
-    bLoss.style.background    = l ? '#ff432e'     : 'transparent';
-    bLoss.style.borderColor   = l ? '#ff432e'     : '#444';
-    pnlInp.style.borderColor  = l ? '#ff432e'     : '#0faf59';
-    pnlPrev.style.color       = l ? '#ff432e'     : '#0faf59';
-    const pct = Number(document.getElementById('_inp_progress').value);
-    progPrev.style.background = l ? '#ff432e' : '#0faf59';
-    progPrev.style.marginLeft = l ? (100 - pct) + '%' : '0%';
-  }
-  bProfit.onclick = () => setLoss(false);
-  bLoss.onclick   = () => setLoss(true);
-  pnlInp.addEventListener('input', () => {
-    pnlPrev.textContent = fmtAmt(Math.abs(Number(pnlInp.value) || 0));
-  });
-
-  const progInp = document.getElementById('_inp_progress');
-  const progVal = document.getElementById('_progress_val');
-  progInp.addEventListener('input', () => {
-    const pct = Number(progInp.value);
-    progVal.textContent       = pct + '%';
-    progPrev.style.width      = pct + '%';
-    progPrev.style.background = lossMode ? '#ff432e' : '#0faf59';
-    progPrev.style.marginLeft = lossMode ? (100 - pct) + '%' : '0%';
-  });
-
-  let pattiOn    = autoPatti;
-  const pattiBg  = document.getElementById('_patti_bg');
-  const pattiDot = document.getElementById('_patti_dot');
-  pattiBg.onclick = () => {
-    pattiOn = !pattiOn;
-    pattiBg.style.background = pattiOn ? '#0faf59' : '#444';
-    pattiDot.style.left      = pattiOn ? '19px'    : '3px';
-  };
+  overlay.onclick = e => { if (e.target === overlay) overlay.remove(); };
 
   document.getElementById('_btn_apply').onclick = () => {
-    const nameVal    = document.getElementById('_inp_name').value.trim() || 'Live';
-    const posVal     = document.getElementById('_inp_pos').value.trim();
-    const fs593Input = document.getElementById('_inp_fs593').value.trim();
-    const initInput  = Number(document.getElementById('_inp_init').value);
-    const progPct    = Number(progInp.value);
+    const nameVal     = document.getElementById('_inp_name').value.trim() || 'Live';
+    const posVal      = document.getElementById('_inp_pos').value.trim();
+    const absVal      = Math.abs(Number(pnlInp.value) || 0);
+    const pnlVal      = isLossSelected ? -absVal : absVal;
+    const progressPct = Number(progressInp.value);
 
-    if (initInput > 0) { initialBal = initInput; localStorage.setItem(KEY_INIT, initialBal); }
     localStorage.setItem(KEY_LB, JSON.stringify({ name: nameVal }));
-    if (posVal) { savedPosition = posVal; localStorage.setItem(KEY_POSITION, posVal); }
-    savedProgress = progPct; localStorage.setItem(KEY_PROGRESS, progPct);
-    pnlMode = mode; localStorage.setItem(KEY_PNL_MODE, mode);
-
-    // Level save + icon apply
-    if (selectedLevel === 'auto') {
-      localStorage.removeItem('manual_level');
-    } else {
-      localStorage.setItem('manual_level', selectedLevel);
-      const lvlHref = `/profile/images/spritemap.svg#icon-profile-level-${selectedLevel}`;
-      document.querySelectorAll('.h5aTJ svg use, .ePf8T svg use, .lmj_k svg use').forEach(icon => {
-        icon.setAttribute('xlink:href', lvlHref);
-        icon.setAttribute('href', lvlHref);
-      });
+    if (posVal) {
+      savedPosition = posVal;
+      localStorage.setItem(KEY_POSITION, posVal);
     }
-
-    if (mode === 'manual') {
-      const absVal = Math.abs(Number(pnlInp.value) || 0);
-      manualPnl = lossMode ? -absVal : absVal;
-      localStorage.setItem(KEY_PNL, manualPnl);
-    }
-    if (fs593Input) { savedFs593 = fs593Input; localStorage.setItem(KEY_FS593, fs593Input); }
-    if (pattiOn && !autoPatti)      startAutoPatti();
-    else if (!pattiOn && autoPatti) stopAutoPatti();
-
+    savedProgress = progressPct;
+    localStorage.setItem(KEY_PROGRESS, progressPct);
+    manualPnl   = pnlVal;
+    manualPnlOn = toggleOn;
+    localStorage.setItem(KEY_PNL,    pnlVal);
+    localStorage.setItem(KEY_PNL_ON, toggleOn ? 'true' : 'false');
     overlay.remove();
     updateUI();
   };
 }
 
-// ─── Deposit button intercept ─────────────────────────────────────
-function openInitPopup() {
+// ─── Main Settings Popup (Deposit button — same as original) ──────
+function openSettings() {
   if (document.getElementById('live-settings-popup')) return;
-  const ub    = safeNum(document.querySelector('.qKWSR, .pVBHU')?.textContent) || 0;
+  const ub = safeNum($(selectors.userBalance)?.textContent) || 0;
   const modal = document.createElement('div');
   modal.id = 'live-settings-popup';
   modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.9);display:flex;align-items:center;justify-content:center;z-index:999999;backdrop-filter:blur(8px);';
   modal.innerHTML = `
-    <div style="background:#1c1c2e;padding:30px;border-radius:15px;width:320px;max-width:90vw;color:#fff;border:1px solid #0faf59;text-align:center;font-family:sans-serif;">
+    <div style="background:#1c1c2e;padding:30px;border-radius:15px;width:320px;color:#fff;border:1px solid #0faf59;text-align:center;font-family:sans-serif;">
       <h3 style="color:#0faf59;margin-bottom:20px;">Dubai Live Trade</h3>
       <input id="inp-name" placeholder="Display Name" value="Live"
         style="width:100%;padding:12px;margin-bottom:10px;background:#25253d;border:1px solid #444;color:#fff;border-radius:8px;box-sizing:border-box;">
-      <input id="inp-init" type="number" placeholder="Starting Balance (e.g. 1000)"
-        style="width:100%;padding:12px;margin-bottom:20px;background:#25253d;border:1px solid #0faf59;color:#fff;border-radius:8px;box-sizing:border-box;">
-      <button id="btn-save" style="width:100%;padding:14px;background:#0faf59;border:none;color:#fff;font-weight:bold;cursor:pointer;border-radius:8px;">ACTIVATE NOW</button>
+      <input id="inp-init" type="number" placeholder="Initial Balance"
+        style="width:100%;padding:12px;margin-bottom:20px;background:#25253d;border:1px solid #444;color:#fff;border-radius:8px;box-sizing:border-box;">
+      <button id="btn-save"
+        style="width:100%;padding:14px;background:#0faf59;border:none;color:#fff;font-weight:bold;cursor:pointer;border-radius:8px;">
+        ACTIVATE NOW
+      </button>
     </div>`;
   document.body.appendChild(modal);
+
   document.getElementById('btn-save').onclick = () => {
-    const entered = Number(document.getElementById('inp-init').value);
-    initialBal = entered > 0 ? entered : ub;
+    initialBal = ub - (Number(document.getElementById('inp-init').value) || 0);
     localStorage.setItem(KEY_INIT, initialBal);
     localStorage.setItem(KEY_LB, JSON.stringify({ name: document.getElementById('inp-name').value || 'Live' }));
     modal.remove();
     updateUI();
   };
 }
+
+// ─── Deposit button click ─────────────────────────────────────────
 document.addEventListener('click', e => {
-  if (e.target.closest('a,button') && /deposit/i.test(e.target.textContent)) {
-    e.preventDefault(); openInitPopup();
+  if (e.target.closest('a, button') && /deposit/i.test(e.target.textContent)) {
+    e.preventDefault();
+    openSettings();
   }
 }, true);
+
 
 // ─── Init ─────────────────────────────────────────────────────────
 function init() {
   hideBonusBanner();
-  startLineAnimation();
-  startTradeObserver();   // notification se trade result detect
-  startBalanceTracker();  // loss amount ke liye balance backup
   setTimeout(() => {
     fixUrl();
     hideBonusBanner();
     showFloatingBtn();
     updateUI();
-    if (autoPatti) startAutoPatti();
-    let n = 0;
-    const t = setInterval(() => { hideBonusBanner(); if (++n > 20) clearInterval(t); }, 500);
   }, 1200);
 }
 
-// ─── License Check ────────────────────────────────────────────────
+// ─── Startup: Check License ───────────────────────────────────────
 (async () => {
-  const key = localStorage.getItem(KEY_LICENSE);
-  if (!key) { showLicensePopup(); return; }
-  try {
-    const ctrl = new AbortController();
-    const t    = setTimeout(() => ctrl.abort(), 8000);
-    const res  = await fetch(`${SCRIPT_URL}?key=${encodeURIComponent(key)}`, { signal: ctrl.signal });
-    clearTimeout(t);
-    if ((await res.text()).trim() === 'active') { init(); }
-    else { localStorage.removeItem(KEY_LICENSE); showLicensePopup(); }
-  } catch {
-    localStorage.removeItem(KEY_LICENSE); showLicensePopup();
+  const savedKey = localStorage.getItem(KEY_LICENSE);
+  if (savedKey) {
+    const valid = await checkLicense(savedKey);
+    if (valid) {
+      init();
+    } else {
+      localStorage.removeItem(KEY_LICENSE);
+      showLicensePopup();
+    }
+  } else {
+    showLicensePopup();
   }
 })();
 
