@@ -307,23 +307,27 @@ function _runUpdateUI() {
     if (el.textContent !== lbData.name) el.textContent = lbData.name;
   });
 
-  // ── Demo balance → Zt1hG ──
-  // b.YnoT0 sirf popup ke andar hota hai aur Quotex khud Zt1hG update karta hai.
-  // Hamaara kaam sirf: agar Zt1hG $0.00 dikhaye to b.YnoT0 se fill karo.
+  // ── Demo balance → b.YnoT0 + .Zt1hG ──
+  // b.YnoT0 se balance padho aur dono elements mein likho
   let curBal = 0;
   document.querySelectorAll('b.YnoT0').forEach(b => {
     const v = safeNum(b.textContent);
     if (v > curBal) curBal = v;
   });
-  if (curBal <= 0 && window.settings?.demoBalance) {
-    curBal = safeNum(window.settings.demoBalance);
+  if (curBal <= 0) {
+    const balEl = document.querySelector('.qKWSR, .pVBHU');
+    if (balEl) curBal = safeNum(balEl.textContent);
   }
-  // Sirf $0.00 fix karo — baaki Quotex pe chhod do
-  if (curBal > 0) {
-    document.querySelectorAll('.Zt1hG').forEach(el => {
-      if (safeNum(el.textContent) <= 0) el.textContent = fmtAmt(curBal);
-    });
-  }
+  if (curBal <= 0 && initialBal > 0) curBal = initialBal;
+  const amt = fmtAmt(curBal);
+  document.querySelectorAll('b.YnoT0').forEach(el => {
+    if (el.closest('.p0Ijl, .Qx5RW')) return; // switcher popup — mat chhuo
+    el.textContent = amt;
+  });
+  document.querySelectorAll('.Zt1hG').forEach(el => {
+    if (el.closest('.p0Ijl, .Qx5RW')) return; // switcher popup — mat chhuo
+    el.textContent = amt;
+  });
 
   // ── Level Icon — Auto (balance se real-time) ──
   // Demo ya live — jo bhi balance .qKWSR mein hai, usi se level decide karo
@@ -360,8 +364,10 @@ function _runUpdateUI() {
 
   // ── Account text — screen size ke hisaab se ──
   // Laptop (>768px): "Live Account" | Mobile/Tab (<=768px): "Live"
+  // .p0Ijl / .Qx5RW = switcher popup — iske andar text mat badlo
   const isDesktop = window.innerWidth > 768;
   document.querySelectorAll('.v2KPX.lTzTl, .v2KPX').forEach(el => {
+    if (el.closest('.p0Ijl, .Qx5RW')) return; // switcher popup — haath mat lagao
     if (/demo|live/i.test(el.textContent)) {
       el.textContent = isDesktop ? 'Live Account' : 'Live';
       el.style.setProperty('color', '#0faf59', 'important');
