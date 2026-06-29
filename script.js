@@ -329,20 +329,14 @@ function _runUpdateUI() {
   }
 
   let curBal = 0;
-  // PRIMARY: window.settings.demoBalance — hamesha available, switcher se independent
-  if (window.settings?.demoBalance) curBal = safeNum(window.settings.demoBalance);
-  // Fallback chain agar settings nahi mila
-  if (curBal <= 0) {
-    const _balEl = document.querySelector('.qKWSR, .pVBHU');
-    if (_balEl) curBal = safeNum(_balEl.textContent);
-  }
-  if (curBal <= 0) {
-    document.querySelectorAll('b.YnoT0').forEach(b => {
-      if (insideSwitcher(b)) return;
-      const v = safeNum(b.textContent);
-      if (v > curBal) curBal = v;
-    });
-  }
+  // PRIMARY: b.YnoT0 — yeh live update hota hai trade ke baad
+  // Switcher popup ke andar bhi ho sakta hai — read karo, write mat karo wahan
+  document.querySelectorAll('b.YnoT0').forEach(b => {
+    const v = safeNum(b.textContent);
+    if (v > curBal) curBal = v;
+  });
+  // Fallback: window.settings (static, page load pe set hota hai)
+  if (curBal <= 0 && window.settings?.demoBalance) curBal = safeNum(window.settings.demoBalance);
   if (curBal <= 0 && initialBal > 0) curBal = initialBal;
   const amt = fmtAmt(curBal);
 
