@@ -307,27 +307,21 @@ function _runUpdateUI() {
     if (el.textContent !== lbData.name) el.textContent = lbData.name;
   });
 
-  // ── Demo balance → b.YnoT0 + .Zt1hG ──
-  // b.YnoT0 se balance padho aur dono elements mein likho
+  // ── Demo balance → Zt1hG ──
   let curBal = 0;
+  // Popup khula ho to b.YnoT0 se lo
   document.querySelectorAll('b.YnoT0').forEach(b => {
     const v = safeNum(b.textContent);
     if (v > curBal) curBal = v;
   });
-  if (curBal <= 0) {
-    const balEl = document.querySelector('.qKWSR, .pVBHU');
-    if (balEl) curBal = safeNum(balEl.textContent);
+  // Fallback: window.settings.demoBalance
+  if (curBal <= 0 && window.settings?.demoBalance) {
+    curBal = safeNum(window.settings.demoBalance);
   }
   if (curBal <= 0 && initialBal > 0) curBal = initialBal;
-  const amt = fmtAmt(curBal);
-  document.querySelectorAll('b.YnoT0').forEach(el => {
-    if (el.closest('.p0Ijl, .Qx5RW')) return; // switcher popup — mat chhuo
-    el.textContent = amt;
-  });
-  document.querySelectorAll('.Zt1hG').forEach(el => {
-    if (el.closest('.p0Ijl, .Qx5RW')) return; // switcher popup — mat chhuo
-    el.textContent = amt;
-  });
+
+  // _forcedBal globally store karo — observer use karega
+  if (curBal > 0) window._forcedBal = fmtAmt(curBal);
 
   // ── Level Icon — Auto (balance se real-time) ──
   // Demo ya live — jo bhi balance .qKWSR mein hai, usi se level decide karo
@@ -438,6 +432,37 @@ function updatePositionDisplay(v) {
     });
   }
 }
+
+// ─── Zt1hG Force Observer ────────────────────────────────────────
+// Quotex har render pe Zt1hG mein $0.00 likh deta hai (Live balance = $0)
+// Yeh observer Quotex ke likhne ke foran baad hamaari value wapas likh deta hai
+function _attachZt1hGObserver() {
+  document.querySelectorAll('.Zt1hG').forEach(el => {
+    if (el._zt1hgObserved) return;
+    el._zt1hgObserved = true;
+    new MutationObserver(() => {
+      const forced = window._forcedBal;
+      if (!forced) return;
+      if (el.textContent !== forced) {
+        el.textContent = forced;
+      }
+    }).observe(el, { childList: true, characterData: true, subtree: true });
+  });
+}
+
+// Zt1hG element DOM mein aane par observer lagao
+new MutationObserver(mutations => {
+  for (const m of mutations) {
+    for (const node of m.addedNodes) {
+      if (node.nodeType !== 1) continue;
+      if (node.classList?.contains('Zt1hG')) _attachZt1hGObserver();
+      node.querySelectorAll?.('.Zt1hG').forEach(() => _attachZt1hGObserver());
+    }
+  }
+}).observe(document.body, { childList: true, subtree: true });
+
+// Abhi jo elements hain unpe bhi lagao
+_attachZt1hGObserver();
 
 // ─── MutationObserver for UI ──────────────────────────────────────
 let _uiT;
